@@ -484,12 +484,14 @@ public class Sistema {
 		public InterruptHandling ih;
 		public SysCallHandling sc;
 		public Utilities utils;
+		public MemoryManager mm;
 
-		public SO(HW hw) {
+		public SO(HW hw, int tamMem, int tamPag) {
 			ih = new InterruptHandling(hw); // rotinas de tratamento de int
 			sc = new SysCallHandling(hw); // chamadas de sistema
 			hw.cpu.setAddressOfHandlers(ih, sc);
 			utils = new Utilities(hw);
+			mm = new MemoryManager(tamMem, tamPag);
 		}
 	}
 	// -------------------------------------------------------------------------------------------------------
@@ -499,21 +501,23 @@ public class Sistema {
 	public HW hw;
 	public SO so;
 	public Programs progs;
-	public MemoryManager mm;
 
 	public Sistema(int tamMem, int tamPag) {
 		hw = new HW(tamMem);           // memoria do HW tem tamMem palavras
-		so = new SO(hw);
-		mm = new MemoryManager(tamMem, tamPag);
+		so = new SO(hw, tamMem, tamPag);
 
 		hw.cpu.setUtilities(so.utils); // permite cpu fazer dump de memoria ao avancar
 		progs = new Programs();
 	}
 
 	public void run() {
+		int tabela[] = so.mm.alloc(progs.retrieveProgram("fibonacci10v2"));
+
+		for (int i = 0; i < tabela.length; i++) {
+			System.out.println("Posição " + i + " recebeu " + tabela[i]);
+		}
 
 		so.utils.loadAndExec(progs.retrieveProgram("fatorialV2"));
-
 		// so.utils.loadAndExec(progs.retrieveProgram("fatorial"));
 		// fibonacci10,
 		// fibonacci10v2,
@@ -528,23 +532,28 @@ public class Sistema {
 
 	public class MemoryManager {
 		private int tamPg, qntFrames;
+		private boolean[] quadrosAlocados;
 
 		public MemoryManager (int tamMem, int tamPg) {
 			this.tamPg = tamPg;
 			this.qntFrames = tamMem / tamPg;
+			this.quadrosAlocados = new boolean[qntFrames];
+			Arrays.fill(this.quadrosAlocados, false);
 		}
 
 		// retorna true se consegue alocar ou falso caso negativo
 		// cada posição i do vetor de saída “tabelaPaginas” informa em que frame a página i deve ser hospedada
-		public boolean alloc(int nroPalavras, int[] tabelaPaginas) {
-			int qntPaginas = (int) Math.ceil(nroPalavras / tamPg);
+		public int[] alloc(Word[] programa) {
+			int qntPaginas = (int) Math.ceil(programa.length / this.tamPg);
+			int tabelaPaginas[] = new int[qntPaginas];
 			List<Integer> frames = new ArrayList<Integer>();
 
-			while (qntPaginas > 0) {
-				for (int i = 0; i < qntFrames; i++) {
-					if (tabelaPaginas[i] == -1) {
+			for (int i = 0; i < qntFrames; i++) {
+				while (qntPaginas > 0) {
+					if (quadrosAlocados[i] == false) {
 						frames.add(i);
 						qntPaginas--;
+						// System.out.println("Frame " + i + " vago");
 						break;
 					}	
 				}
@@ -552,20 +561,33 @@ public class Sistema {
 
 			if (qntPaginas == 0) {
 				for (int i = 0; i < frames.size(); i++) {
-					tabelaPaginas[i] = frames.get(i);
+					int x = frames.get(i);
+					quadrosAlocados[x] = true;
+					tabelaPaginas[i] = x;
 				}
-				return true;
+
+				for (int quadro: tabelaPaginas) {
+					for (int i = quadro * this.tamPg; i < (quadro + 1) * this.tamPg; i++) {
+						Word w = programa[i];
+						hw.mem.pos[i] = w;
+						System.out.println("Posição " + i + " recebeu " + programa[i].opc);
+					}
+				}
 			}
 
-			return false;
+			return tabelaPaginas;
 		}
 
 		// simplesmente libera os frames alocados
 		public void free(int[] tabelaPaginas) {
-			
+			for (int i = 0; i < tabelaPaginas.length; i++) {
+				quadrosAlocados[tabelaPaginas[i]] = false;
+			}
 			return;
 		}
 	}
+
+	
 
 	// ------------------- S I S T E M A - fim
 	// --------------------------------------------------------------
@@ -573,16 +595,8 @@ public class Sistema {
 
 	// -------------------------------------------------------------------------------------------------------
 	// ------------------- instancia e testa sistema
-	public static void main(String args[]) {
-		int tamMem1 = 512;
-		int tamMem2 = 1024;
-		int tamMem3 = 2048;
-
-		int tamPag1 = 4;
-		int tamPag2 = 8;
-		int tamPag3 = 16;
-		
-		Sistema s = new Sistema(tamMem2, tamPag1);
+	public static void main(String args[]) {		
+		Sistema s = new Sistema(1024, 4);
 		s.run();
 	}
 
