@@ -493,6 +493,17 @@ public class Sistema {
 			utils = new Utilities(hw);
 			mm = new MemoryManager(tamMem, tamPag);
 		}
+
+		// public boolean load(int[] tabelaPaginas) {
+		// 	for (int quadro: tabelaPaginas) {
+		// 			for (int i = quadro * this.tamPg; i < (quadro + 1) * this.tamPg; i++) {
+		// 				Word w = programa[i];
+		// 				hw.mem.pos[i] = w;
+		// 				System.out.println("Posição " + i + " recebeu " + programa[i].opc);
+		// 			}
+		// 		}
+		// }
+		
 	}
 	// -------------------------------------------------------------------------------------------------------
 	// ------------------- S I S T E M A
@@ -511,13 +522,64 @@ public class Sistema {
 	}
 
 	public void run() {
-		int tabela[] = so.mm.alloc(progs.retrieveProgram("fibonacci10v2"));
+		System.out.println("\n\n### ### ### SISTEMA OPERACIONAL ### ### ###");
 
-		for (int i = 0; i < tabela.length; i++) {
-			System.out.println("Posição " + i + " recebeu " + tabela[i]);
-		}
+		Scanner in = new Scanner(System.in);
+		int op;
+		do {
+			System.out.println("\n\nOPERAÇÕES");
+			System.out.println("1 - Executar programa");
+			System.out.println("0 - Sair");
+			System.out.print("> Informe a operação que deseja realizar: ");
+			op = in.nextInt();
 
-		so.utils.loadAndExec(progs.retrieveProgram("fatorialV2"));
+			switch (op) {
+				case 1:
+					System.out.println("\n\nPROGRAMAS");
+					System.out.println("1 - Fatorial");
+					System.out.println("2 - FatorialV2");
+					System.out.println("3 - progMinimo");
+					System.out.println("4 - fibonacci10");
+					System.out.println("5 - fibonacci10v2");
+					System.out.println("6 - PB");
+					System.out.println("7 - PC");
+					System.out.println("0 - Voltar");
+					System.out.print("> Informe o programa que deseja executar: ");
+					int program = in.nextInt();
+
+					switch (program) {
+						case 1:
+							so.mm.alloc(progs.retrieveProgram("fatorial").length);
+							// so.mm.alloc(progs.retrieveProgram("fatorial").length);
+							break;
+
+						case 0:
+							System.out.println("Retornando ao menu de operações do sistema operacional...");
+							break;
+
+						default:
+							System.out.println("ERRO: Operação inválida. Tente novamente");
+							break;
+					}
+					break;
+			
+				case 0:
+					System.out.println("Encerrando sistema operacional...");
+					break;
+
+				default:
+					System.out.println("ERRO: Operação inválida. Tente novamente");
+					break;
+			}
+
+		} while (op != 0);
+
+
+		// for (int i = 0; i < tabela.length; i++) {
+		// 	System.out.println("Posição " + i + " recebeu " + tabela[i]);
+		// }
+
+		// so.utils.loadAndExec(progs.retrieveProgram("fatorialV2"));
 		// so.utils.loadAndExec(progs.retrieveProgram("fatorial"));
 		// fibonacci10,
 		// fibonacci10v2,
@@ -531,59 +593,52 @@ public class Sistema {
 	// Gerenciador de memória
 
 	public class MemoryManager {
-		private int tamPg, qntFrames;
-		private boolean[] quadrosAlocados;
+		private int pageSize;
+		private int framesNumber;
+		private boolean[] allocatedFrames;
 
-		public MemoryManager (int tamMem, int tamPg) {
-			this.tamPg = tamPg;
-			this.qntFrames = tamMem / tamPg;
-			this.quadrosAlocados = new boolean[qntFrames];
-			Arrays.fill(this.quadrosAlocados, false);
+		public MemoryManager (int memorySize, int pageSize) {
+			this.pageSize = pageSize;
+			this.framesNumber = memorySize / pageSize;
+			this.allocatedFrames = new boolean[framesNumber];
+			Arrays.fill(this.allocatedFrames, false);
 		}
 
 		// retorna true se consegue alocar ou falso caso negativo
 		// cada posição i do vetor de saída “tabelaPaginas” informa em que frame a página i deve ser hospedada
-		public int[] alloc(Word[] programa) {
-			int qntPaginas = (int) Math.ceil(programa.length / this.tamPg);
-			int tabelaPaginas[] = new int[qntPaginas];
-			List<Integer> frames = new ArrayList<Integer>();
+		public int[] alloc(int wordsNumber) {
+			int pagesNumber = (int) Math.ceil((double) wordsNumber / this.pageSize);
+			int pagesToAllocate = pagesNumber;
+			int[] frames = new int[pagesNumber];
+			int[] pagesTable = new int[pagesNumber];
+			int lastFrame = 0;
 
-			for (int i = 0; i < qntFrames; i++) {
-				while (qntPaginas > 0) {
-					if (quadrosAlocados[i] == false) {
-						frames.add(i);
-						qntPaginas--;
-						// System.out.println("Frame " + i + " vago");
-						break;
-					}	
+			for (int i = 0; i < framesNumber; i++) {
+				if (!allocatedFrames[i]) {
+					frames[lastFrame] = i;
+					lastFrame++;
+					
+					pagesToAllocate--;
+					if (pagesToAllocate == 0) break;
 				}
 			}
 
-			if (qntPaginas == 0) {
-				for (int i = 0; i < frames.size(); i++) {
-					int x = frames.get(i);
-					quadrosAlocados[x] = true;
-					tabelaPaginas[i] = x;
-				}
-
-				for (int quadro: tabelaPaginas) {
-					for (int i = quadro * this.tamPg; i < (quadro + 1) * this.tamPg; i++) {
-						Word w = programa[i];
-						hw.mem.pos[i] = w;
-						System.out.println("Posição " + i + " recebeu " + programa[i].opc);
-					}
+			if (pagesToAllocate == 0) {
+				for (int i = 0; i < pagesNumber; i++) {
+					int f = frames[i];
+					allocatedFrames[f] = true;
+					pagesTable[i] = f;
 				}
 			}
 
-			return tabelaPaginas;
+			return pagesTable;
 		}
 
 		// simplesmente libera os frames alocados
 		public void free(int[] tabelaPaginas) {
 			for (int i = 0; i < tabelaPaginas.length; i++) {
-				quadrosAlocados[tabelaPaginas[i]] = false;
+				allocatedFrames[tabelaPaginas[i]] = false;
 			}
-			return;
 		}
 	}
 
