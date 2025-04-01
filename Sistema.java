@@ -496,34 +496,100 @@ public class Sistema {
 			pm = new ProcessManager(mm);
 		}
 
+		// cria um processo na memória
 		public boolean newProcess(Word[] program) {
 			running = pm.createProcess(program);
 
 			return running == null;
 		}
 
-		public void rmProcess(int id) {
+		// retira o processo id do sistema, tenha ele executado ou não
+		public boolean rmProcess(int id) {
+			PCB target = null;
+			int index = -1;
 
+			for (PCB pcb : pm.getProcesses()) {
+				if (pcb.getId() == id) {
+					target = pcb;
+					index = i;
+					break;
+				}
+			}
+
+			if (target != null) {
+				mm.free(alvo.getPagesTable());
+				pm.dealloc(id); // Não sei se precisa aqui
+
+				pm.getReady().remove(alvo);
+				pm.getProcesses().remove(indice);
+
+				return true;
+			}
+
+			return false;
 		}
 
+		// lista o conteúdo do PCB e o conteúdo da memória do processo com id
 		public void dump(int id) {
+			PCB target = null;
 
+			for (PCB pcb : pm.getProcesses()) {
+				if (pcb.getId() == id) {
+					target = pcb;
+					break;
+				}
+			}
+
+			if (target != null) {
+				int[] pages = target.getPagesTable();
+				int tamPag = mm.getPageSize();
+
+				System.out.println("Dump | id " + id + ":");
+
+				// Sim, vai bilingue mesmo
+				for (int i = 0; i < pages.length; i++) {
+					int inicio = pages[i] * tamPag;
+					int fim = inicio + tamPag;
+					utils.dump(inicio, fim);
+				}
+			}
 		}
 
+		// lista todos processos existentes
 		public void ps() {
-
+			for (PCB pcb : pm.getProcesses()) {
+				System.out.println("ID: " + pcb.getId() + " | PC: " + pcb.getPc());
+			}
 		}
 
+		// lista a memória entre posições início e fim, independente do processo
 		public void dumpM (int start, int end) {
-
+			utils.dump(start, end);
 		}
 
+		// executa o processo com id fornecido. se não houver processo, retorna erro.
+		// Esse eu fiz com IA :) 
 		public void exec() {
+			if (pm.getReady().isEmpty()) {
+				System.out.println("Nenhum processo pronto para execução.");
+				return;
+			}
 
+			running = pm.getReady().poll();
+
+			System.out.println("Executando processo id " + running.getId());
+
+			hw.cpu.setContext(running.getPc());
+			hw.cpu.run();
+
+			rmProcess(running.getId());
+
+			running = null;
 		}
 
-		public void toggleTraceOn() {
-			
+		// liga ou desliga modo de execução em que CPU print cada instrução executada
+		public void toggleTrace() {
+			// Tendi nada
 		}
 		
 	}
@@ -688,6 +754,10 @@ public class Sistema {
 			return ready;
 		}
 
+		public List<PCB> getProcesses() {
+			return processes;
+		}
+
 		public PCB createProcess(Word[] program) {
 			int wordsNumber = program.length;
 			int[] pagesTable = mm.alloc(wordsNumber);
@@ -739,13 +809,13 @@ public class Sistema {
 		private int[] pagesTable;
 
 		public PCB(int pc, int[] pagesTable) {
-			this.idCounter++
+			idCounter++;
 			this.id = idCounter;
 			this.pc = pc;
 			this.pagesTable = pagesTable;
 		}
 
-        public static int getId() {
+        public int getId() {
             return id;
         }
 
