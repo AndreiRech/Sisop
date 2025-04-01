@@ -39,8 +39,7 @@ public class Sistema {
 			pos = new Word[size];
 			for (int i = 0; i < pos.length; i++) {
 				pos[i] = new Word(Opcode.___, -1, -1, -1);
-			}
-			; // cada posicao da memoria inicializada
+			} // cada posicao da memoria inicializada
 		}
 	}
 
@@ -485,6 +484,8 @@ public class Sistema {
 		public SysCallHandling sc;
 		public Utilities utils;
 		public MemoryManager mm;
+		public ProcessManager pm;
+		public PCB running;
 
 		public SO(HW hw, int tamMem, int tamPag) {
 			ih = new InterruptHandling(hw); // rotinas de tratamento de int
@@ -492,17 +493,38 @@ public class Sistema {
 			hw.cpu.setAddressOfHandlers(ih, sc);
 			utils = new Utilities(hw);
 			mm = new MemoryManager(tamMem, tamPag);
+			pm = new ProcessManager(mm);
 		}
 
-		// public boolean load(int[] tabelaPaginas) {
-		// 	for (int quadro: tabelaPaginas) {
-		// 			for (int i = quadro * this.tamPg; i < (quadro + 1) * this.tamPg; i++) {
-		// 				Word w = programa[i];
-		// 				hw.mem.pos[i] = w;
-		// 				System.out.println("Posição " + i + " recebeu " + programa[i].opc);
-		// 			}
-		// 		}
-		// }
+		public boolean newProcess(Word[] program) {
+			running = pm.createProcess(program);
+
+			return running == null;
+		}
+
+		public void rmProcess(int id) {
+
+		}
+
+		public void dump(int id) {
+
+		}
+
+		public void ps() {
+
+		}
+
+		public void dumpM (int start, int end) {
+
+		}
+
+		public void exec() {
+
+		}
+
+		public void toggleTraceOn() {
+			
+		}
 		
 	}
 	// -------------------------------------------------------------------------------------------------------
@@ -604,6 +626,10 @@ public class Sistema {
 			Arrays.fill(this.allocatedFrames, false);
 		}
 
+		public int getPageSize() {
+			return pageSize;
+		}
+
 		// retorna true se consegue alocar ou falso caso negativo
 		// cada posição i do vetor de saída “tabelaPaginas” informa em que frame a página i deve ser hospedada
 		public int[] alloc(int wordsNumber) {
@@ -631,6 +657,10 @@ public class Sistema {
 				}
 			}
 
+			for (int i = 0; i < pagesTable.length; i++) {
+				System.out.println(i + ": " + pagesTable[i]);
+			}
+
 			return pagesTable;
 		}
 
@@ -641,7 +671,101 @@ public class Sistema {
 			}
 		}
 	}
+	
 
+	public class ProcessManager {
+		private MemoryManager mm;
+		private List<PCB> processes;
+		private Queue<PCB> ready;
+
+		public ProcessManager(MemoryManager mm) {
+			this.mm = mm;
+			processes = new ArrayList<>();
+			ready = new LinkedList<>();
+		}
+
+		public Queue<PCB> getReady() {
+			return ready;
+		}
+
+		public PCB createProcess(Word[] program) {
+			int wordsNumber = program.length;
+			int[] pagesTable = mm.alloc(wordsNumber);
+			if (pagesTable.length == 0) {
+				return null;
+			}
+			
+			int pageSize = this.mm.getPageSize();
+			int pc = pagesTable[0] * pageSize;
+			PCB pcb = new PCB(pc, pagesTable);
+
+			for (int frame : pagesTable) {
+				for (int i = frame * pageSize; i < (frame + 1) * pageSize; i++) {
+					Word w = program[i];
+					hw.mem.pos[i] = w;
+					System.out.println("Posição " + i + " recebeu " + program[i].opc);
+				}
+			}
+			
+			processes.add(pcb);
+			ready.add(pcb);
+
+			return pcb;
+		}
+
+
+		public void dealloc(int id) {
+			PCB process = processes.get(id);
+			int[] pagesTable = process.getPagesTable();
+
+			int pageSize = this.mm.getPageSize();
+			for (int frame : pagesTable) {
+				for (int i = frame * pageSize; i < (frame + 1) * pageSize; i++) {
+					hw.mem.pos[i] = new Word(Opcode.___, -1, -1, -1);
+				}
+			}
+
+			ready.remove(process);
+		}
+	}
+
+
+	public class PCB {
+		private static int idCounter;
+		private int id;
+		private int pc;
+		private boolean running;
+		private boolean ready;
+		private int[] pagesTable;
+
+		public PCB(int pc, int[] pagesTable) {
+			this.idCounter++
+			this.id = idCounter;
+			this.pc = pc;
+			this.pagesTable = pagesTable;
+		}
+
+        public static int getId() {
+            return id;
+        }
+
+        public int getPc() {
+            return pc;
+        }
+
+        public boolean isRunning() {
+            return running;
+        }
+
+        public boolean isReady() {
+            return ready;
+        }
+
+		public int[] getPagesTable() {
+			return pagesTable;
+		}
+
+	}
 	
 
 	// ------------------- S I S T E M A - fim
