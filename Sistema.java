@@ -511,17 +511,17 @@ public class Sistema {
 			for (PCB pcb : pm.getProcesses()) {
 				if (pcb.getId() == id) {
 					target = pcb;
-					index = i;
+					index = id;
 					break;
 				}
 			}
 
 			if (target != null) {
-				mm.free(alvo.getPagesTable());
+				mm.free(target.getPagesTable());
 				pm.dealloc(id); // Não sei se precisa aqui
 
-				pm.getReady().remove(alvo);
-				pm.getProcesses().remove(indice);
+				pm.getReady().remove(target);
+				pm.getProcesses().remove(index);
 
 				return true;
 			}
@@ -661,21 +661,6 @@ public class Sistema {
 			}
 
 		} while (op != 0);
-
-
-		// for (int i = 0; i < tabela.length; i++) {
-		// 	System.out.println("Posição " + i + " recebeu " + tabela[i]);
-		// }
-
-		// so.utils.loadAndExec(progs.retrieveProgram("fatorialV2"));
-		// so.utils.loadAndExec(progs.retrieveProgram("fatorial"));
-		// fibonacci10,
-		// fibonacci10v2,
-		// progMinimo,
-		// fatorialWRITE, // saida
-		// fibonacciREAD, // entrada
-		// PB
-		// PC, // bubble sort
 	}
 
 	// Gerenciador de memória
@@ -742,16 +727,12 @@ public class Sistema {
 	public class ProcessManager {
 		private MemoryManager mm;
 		private List<PCB> processes;
-		private Queue<PCB> ready;
+		private Scheduler scheduler;
 
 		public ProcessManager(MemoryManager mm) {
 			this.mm = mm;
 			processes = new ArrayList<>();
-			ready = new LinkedList<>();
-		}
-
-		public Queue<PCB> getReady() {
-			return ready;
+			this.scheduler = new Scheduler(processes);
 		}
 
 		public List<PCB> getProcesses() {
@@ -778,11 +759,9 @@ public class Sistema {
 			}
 			
 			processes.add(pcb);
-			ready.add(pcb);
 
 			return pcb;
 		}
-
 
 		public void dealloc(int id) {
 			PCB process = processes.get(id);
@@ -795,7 +774,7 @@ public class Sistema {
 				}
 			}
 
-			ready.remove(process);
+			processes.remove(id);
 		}
 	}
 
@@ -804,6 +783,7 @@ public class Sistema {
 		private static int idCounter;
 		private int id;
 		private int pc;
+		private int[] regState;
 		private boolean running;
 		private boolean ready;
 		private int[] pagesTable;
@@ -822,6 +802,11 @@ public class Sistema {
         public int getPc() {
             return pc;
         }
+		
+		public void setContext(int pc, int[] reg) {
+			this.pc = pc;
+			this.regState = reg;
+		}
 
         public boolean isRunning() {
             return running;
@@ -831,10 +816,56 @@ public class Sistema {
             return ready;
         }
 
+		private void toggleRunning() { this.running = !this.running; }
+
+		private void toggleReady() { this.ready = !this.ready; }
+
 		public int[] getPagesTable() {
 			return pagesTable;
 		}
 
+	}
+
+	public class Scheduler {
+		private static final int Q = 4;
+		private List<PCB> processes;
+		private Queue<PCB> ready;
+
+		public Scheduler(List<PCB> processes) {
+			this.processes = processes;
+			this.ready = new LinkedList<>();
+			setAllReady();
+		}
+
+		public Queue<PCB> getReady() {
+			return ready;
+		}
+
+		public void setAllReady() {
+			for (PCB p : this.processes) {
+				if (p.isReady()) {
+					ready.add(p);
+				}
+			}
+		}
+
+		public void roundRobin() {
+			PCB process = null;
+
+			while (true) {
+				process = ready.remove();
+				process.toggleReady();
+				process.toggleRunning();
+
+				for(int i = 0; i < Q; i++) { 
+					
+				}
+
+				process.toggleRunning();
+				// se processo ainda nao acabou -> add na lista de prontos
+				// process.toggleReady();
+			}
+		}
 	}
 	
 
