@@ -1,28 +1,9 @@
-// PUCRS - Escola Politécnica - Sistemas Operacionais
-// Prof. Fernando Dotti
-// Código fornecido como parte da solução do projeto de Sistemas Operacionais
-//
-// Estrutura deste código:
-//    Todo código está dentro da classe *Sistema*
-//    Dentro de Sistema, encontra-se acima a definição de HW:
-//           Memory,  Word, 
-//           CPU tem Opcodes (codigos de operacoes suportadas na cpu),
-//               e Interrupcoes possíveis, define o que executa para cada instrucao
-//           VM -  a máquina virtual é uma instanciação de CPU e Memória
-//    Depois as definições de SW:
-//           no momento são esqueletos (so estrutura) para
-//					InterruptHandling    e
-//					SysCallHandling 
-//    A seguir temos utilitários para usar o sistema
-//           carga, início de execução e dump de memória
-//    Por último os programas existentes, que podem ser copiados em memória.
-//           Isto representa programas armazenados.
-//    Veja o main.  Ele instancia o Sistema com os elementos mencionados acima.
-//           em seguida solicita a execução de algum programa com  loadAndExec
-
 import java.util.*;
+import java.util.concurrent.Semaphore;
 
 public class Sistema {
+	Semaphore semaphoreCPU = new Semaphore(0); 
+	Semaphore semaphoreScheduler = new Semaphore(1);
 
 	// -------------------------------------------------------------------------------------------------------
 	// --------------------- H A R D W A R E - definicoes de HW
@@ -72,7 +53,7 @@ public class Sistema {
 	}
 
 	public enum Interrupts {           // possiveis interrupcoes que esta CPU gera
-		noInterrupt, intEnderecoInvalido, intInstrucaoInvalida, intOverflow, intSTOP;
+		noInterrupt, intEnderecoInvalido, intInstrucaoInvalida, intOverflow, intSTOP, processEnd, roundRobin;
 	}
 
 	public class CPU {
@@ -139,16 +120,18 @@ public class Sistema {
 			return true;
 		}
 
-		public void setContext(int _pc) {                 // usado para setar o contexto da cpu para rodar um processo
-			                                              // [ nesta versao é somente colocar o PC na posicao 0 ]
+		public void setContext(int _pc, int[] _reg) {                 // usado para setar o contexto da cpu para rodar um processo
+			reg = _reg;                                   
 			pc = _pc;                                     // pc cfe endereco logico
 			irpt = Interrupts.noInterrupt;                // reset da interrupcao registrada
 		}
 
-		public void run() {                               // execucao da CPU supoe que o contexto da CPU, vide acima, 
-														  // esta devidamente setado
+		public void run() throws InterruptedException {                               // execucao da CPU supoe que o contexto da CPU, vide acima, 
 			cpuStop = false;
 			while (!cpuStop) {      // ciclo de instrucoes. acaba cfe resultado da exec da instrucao, veja cada caso.
+
+				// Espera o scheduler liberar a CPU para o processo
+				semaphoreCPU.acquire();
 
 				// --------------------------------------------------------------------------------------------------
 				// FASE DE FETCH
@@ -345,7 +328,6 @@ public class Sistema {
 				// VERIFICA INTERRUPÇÃO !!! - TERCEIRA FASE DO CICLO DE INSTRUÇÕES
 				if (irpt != Interrupts.noInterrupt) { // existe interrupção
 					ih.handle(irpt);                  // desvia para rotina de tratamento - esta rotina é do SO
-					cpuStop = true;                   // nesta versao, para a CPU
 				}
 			} // FIM DO CICLO DE UMA INSTRUÇÃO
 		}
@@ -356,6 +338,23 @@ public class Sistema {
 
 	// ------------------- HW - constituido de CPU e MEMORIA
 	// -----------------------------------------------
+	public class CpuRunnable implements Runnable {
+		private CPU cpu;
+
+		public CpuRunnable(CPU cpu) {
+			this.cpu = cpu;
+		}
+
+		public void run() {
+			System.out.println("Thread CPU em execução.");
+			try {
+				cpu.run();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
 	public class HW {
 		public Memory mem;
 		public CPU cpu;
@@ -363,6 +362,10 @@ public class Sistema {
 		public HW(int tamMem) {
 			mem = new Memory(tamMem);
 			cpu = new CPU(mem, true); // true liga debug
+
+			CpuRunnable cpuRunnable = new CpuRunnable(cpu);
+			Thread cpuThread = new Thread(cpuRunnable);
+			cpuThread.start();
 		}
 	}
 	// -------------------------------------------------------------------------------------------------------
@@ -388,9 +391,20 @@ public class Sistema {
 		}
 
 		public void handle(Interrupts irpt) {
-			// apenas avisa - todas interrupcoes neste momento finalizam o programa
 			System.out.println(
 					"                                               Interrupcao " + irpt + "   pc: " + hw.cpu.pc);
+
+			switch(irpt) {
+				case roundRobin:
+					System.out.println("RoundRobin");
+					break;
+				case processEnd:
+					System.out.println("ProcessEnd");
+					break;
+				default:
+					System.out.println("Interrupção não tratada: " + irpt);
+					break;
+			}
 		}
 	}
 
@@ -467,16 +481,16 @@ public class Sistema {
 			}
 		}
 
-		private void loadAndExec(Word[] p) {
-			loadProgram(p); // carga do programa na memoria
-			System.out.println("---------------------------------- programa carregado na memoria");
-			dump(0, p.length); // dump da memoria nestas posicoes
-			hw.cpu.setContext(0); // seta pc para endereço 0 - ponto de entrada dos programas
-			System.out.println("---------------------------------- inicia execucao ");
-			hw.cpu.run(); // cpu roda programa ate parar
-			System.out.println("---------------------------------- memoria após execucao ");
-			dump(0, p.length); // dump da memoria com resultado
-		}
+		// private void loadAndExec(Word[] p) {
+		// 	loadProgram(p); // carga do programa na memoria
+		// 	System.out.println("---------------------------------- programa carregado na memoria");
+		// 	dump(0, p.length); // dump da memoria nestas posicoes
+		// 	// hw.cpu.setContext(0); // seta pc para endereço 0 - ponto de entrada dos programas
+		// 	System.out.println("---------------------------------- inicia execucao ");
+		// 	hw.cpu.run(); // cpu roda programa ate parar
+		// 	System.out.println("---------------------------------- memoria após execucao ");
+		// 	dump(0, p.length); // dump da memoria com resultado
+		// }
 	}
 
 	public class SO {
@@ -520,7 +534,6 @@ public class Sistema {
 				mm.free(target.getPagesTable());
 				pm.dealloc(id); // Não sei se precisa aqui
 
-				pm.getReady().remove(target);
 				pm.getProcesses().remove(index);
 
 				return true;
@@ -568,21 +581,19 @@ public class Sistema {
 		}
 
 		// executa o processo com id fornecido. se não houver processo, retorna erro.
-		// Esse eu fiz com IA :) 
 		public void exec() {
-			if (pm.getReady().isEmpty()) {
+			if (ready.isEmpty()) {
 				System.out.println("Nenhum processo pronto para execução.");
 				return;
 			}
 
-			running = pm.getReady().poll();
+			running = ready.poll();
 
 			System.out.println("Executando processo id " + running.getId());
 
-			hw.cpu.setContext(running.getPc());
-			hw.cpu.run();
+			hw.cpu.setContext(running.getPc(), running.getRegState());
 
-			rmProcess(running.getId());
+			System.out.println("Parando processo id " + running.getId());
 
 			running = null;
 		}
@@ -600,10 +611,12 @@ public class Sistema {
 	public HW hw;
 	public SO so;
 	public Programs progs;
+	public Queue<PCB> ready;
 
 	public Sistema(int tamMem, int tamPag) {
 		hw = new HW(tamMem);           // memoria do HW tem tamMem palavras
 		so = new SO(hw, tamMem, tamPag);
+		ready = new LinkedList<>();
 
 		hw.cpu.setUtilities(so.utils); // permite cpu fazer dump de memoria ao avancar
 		progs = new Programs();
@@ -731,7 +744,7 @@ public class Sistema {
 
 		public ProcessManager(MemoryManager mm) {
 			this.mm = mm;
-			processes = new ArrayList<>();
+			this.processes = new ArrayList<>();
 			this.scheduler = new Scheduler(processes);
 		}
 
@@ -759,6 +772,7 @@ public class Sistema {
 			}
 			
 			processes.add(pcb);
+			ready.add(pcb);
 
 			return pcb;
 		}
@@ -775,6 +789,7 @@ public class Sistema {
 			}
 
 			processes.remove(id);
+			ready.remove(process);
 		}
 	}
 
@@ -795,75 +810,35 @@ public class Sistema {
 			this.pagesTable = pagesTable;
 		}
 
-        public int getId() {
-            return id;
-        }
+        public int getId() { return this.id; }
+        public int getPc() { return this.pc; }
+		public int[] getPagesTable() { return pagesTable; }
+		public int[] getRegState() { return this.regState; }
+        public boolean isRunning() { return this.running; }
+        public boolean isReady() { return this.ready; }
+		private void toggleRunning() { this.running = !this.running; }
+		private void toggleReady() { this.ready = !this.ready; }	
 
-        public int getPc() {
-            return pc;
-        }
-		
 		public void setContext(int pc, int[] reg) {
 			this.pc = pc;
 			this.regState = reg;
 		}
-
-        public boolean isRunning() {
-            return running;
-        }
-
-        public boolean isReady() {
-            return ready;
-        }
-
-		private void toggleRunning() { this.running = !this.running; }
-
-		private void toggleReady() { this.ready = !this.ready; }
-
-		public int[] getPagesTable() {
-			return pagesTable;
-		}
-
 	}
 
 	public class Scheduler {
-		private static final int Q = 4;
 		private List<PCB> processes;
-		private Queue<PCB> ready;
 
 		public Scheduler(List<PCB> processes) {
 			this.processes = processes;
-			this.ready = new LinkedList<>();
-			setAllReady();
 		}
 
-		public Queue<PCB> getReady() {
-			return ready;
-		}
-
-		public void setAllReady() {
-			for (PCB p : this.processes) {
-				if (p.isReady()) {
-					ready.add(p);
-				}
-			}
-		}
-
-		public void roundRobin() {
-			PCB process = null;
-
+		public void roundRobin() throws InterruptedException {
 			while (true) {
-				process = ready.remove();
-				process.toggleReady();
-				process.toggleRunning();
+				semaphoreScheduler.acquire();
+				
+				// logica de escalonamento (guarda o estado atual da cpu, seleciona o processo e restaura a cpu dado o estado do processo)
 
-				for(int i = 0; i < Q; i++) { 
-					
-				}
-
-				process.toggleRunning();
-				// se processo ainda nao acabou -> add na lista de prontos
-				// process.toggleReady();
+				semaphoreCPU.release();
 			}
 		}
 	}
@@ -875,7 +850,7 @@ public class Sistema {
 
 	// -------------------------------------------------------------------------------------------------------
 	// ------------------- instancia e testa sistema
-	public static void main(String args[]) {		
+	public static void main(String args[]) {
 		Sistema s = new Sistema(1024, 4);
 		s.run();
 	}
