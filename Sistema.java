@@ -57,6 +57,7 @@ public class Sistema {
 	}
 
 	public class CPU {
+		private static final int Q = 4;
 		private int maxInt; // valores maximo e minimo para inteiros nesta cpu
 		private int minInt;
 		                    // CONTEXTO da CPU ...
@@ -129,206 +130,215 @@ public class Sistema {
 		public void run() throws InterruptedException {                               // execucao da CPU supoe que o contexto da CPU, vide acima, 
 			cpuStop = false;
 			while (!cpuStop) {      // ciclo de instrucoes. acaba cfe resultado da exec da instrucao, veja cada caso.
-
 				// Espera o scheduler liberar a CPU para o processo
 				semaphoreCPU.acquire();
+				boolean processEnd = false;
 
-				// --------------------------------------------------------------------------------------------------
-				// FASE DE FETCH
-				if (legal(pc)) { // pc valido
-					ir = m[pc];  // <<<<<<<<<<<< AQUI faz FETCH - busca posicao da memoria apontada por pc, guarda em ir
-					             // resto é dump de debug
-					if (debug) {
-						System.out.print("                                              regs: ");
-						for (int i = 0; i < 10; i++) {
-							System.out.print(" r[" + i + "]:" + reg[i]);
-						}
-						;
-						System.out.println();
-					}
-					if (debug) {
-						System.out.print("                      pc: " + pc + "       exec: ");
-						u.dump(ir);
-					}
-
-				// --------------------------------------------------------------------------------------------------
-				// FASE DE EXECUCAO DA INSTRUCAO CARREGADA NO ir
-					switch (ir.opc) {       // conforme o opcode (código de operação) executa
-
-						// Instrucoes de Busca e Armazenamento em Memoria
-						case LDI: // Rd ← k        veja a tabela de instrucoes do HW simulado para entender a semantica da instrucao
-							reg[ir.ra] = ir.p;
-							pc++;
-							break;
-						case LDD: // Rd <- [A]
-							if (legal(ir.p)) {
-								reg[ir.ra] = m[ir.p].p;
-								pc++;
-							}
-							break;
-						case LDX: // RD <- [RS] // NOVA
-							if (legal(reg[ir.rb])) {
-								reg[ir.ra] = m[reg[ir.rb]].p;
-								pc++;
-							}
-							break;
-						case STD: // [A] ← Rs
-							if (legal(ir.p)) {
-								m[ir.p].opc = Opcode.DATA;
-								m[ir.p].p = reg[ir.ra];
-								pc++;
-                                if (debug) 
-								    {   System.out.print("                                  ");   
-									    u.dump(ir.p,ir.p+1);							
-									}
-								}
-							break;
-						case STX: // [Rd] ←Rs
-							if (legal(reg[ir.ra])) {
-								m[reg[ir.ra]].opc = Opcode.DATA;
-								m[reg[ir.ra]].p = reg[ir.rb];
-								pc++;
+				// RoundRobin
+				for(int j = 0; j < Q; j++) {
+					
+					// --------------------------------------------------------------------------------------------------
+					// FASE DE FETCH
+					if (legal(pc)) { // pc valido
+						ir = m[pc];  // <<<<<<<<<<<< AQUI faz FETCH - busca posicao da memoria apontada por pc, guarda em ir
+									// resto é dump de debug
+						if (debug) {
+							System.out.print("                                              regs: ");
+							for (int i = 0; i < 10; i++) {
+								System.out.print(" r[" + i + "]:" + reg[i]);
 							}
 							;
-							break;
-						case MOVE: // RD <- RS
-							reg[ir.ra] = reg[ir.rb];
-							pc++;
-							break;
-						// Instrucoes Aritmeticas
-						case ADD: // Rd ← Rd + Rs
-							reg[ir.ra] = reg[ir.ra] + reg[ir.rb];
-							testOverflow(reg[ir.ra]);
-							pc++;
-							break;
-						case ADDI: // Rd ← Rd + k
-							reg[ir.ra] = reg[ir.ra] + ir.p;
-							testOverflow(reg[ir.ra]);
-							pc++;
-							break;
-						case SUB: // Rd ← Rd - Rs
-							reg[ir.ra] = reg[ir.ra] - reg[ir.rb];
-							testOverflow(reg[ir.ra]);
-							pc++;
-							break;
-						case SUBI: // RD <- RD - k // NOVA
-							reg[ir.ra] = reg[ir.ra] - ir.p;
-							testOverflow(reg[ir.ra]);
-							pc++;
-							break;
-						case MULT: // Rd <- Rd * Rs
-							reg[ir.ra] = reg[ir.ra] * reg[ir.rb];
-							testOverflow(reg[ir.ra]);
-							pc++;
-							break;
+							System.out.println();
+						}
+						if (debug) {
+							System.out.print("                      pc: " + pc + "       exec: ");
+							u.dump(ir);
+						}
 
-						// Instrucoes JUMP
-						case JMP: // PC <- k
-							pc = ir.p;
-							break;
-						case JMPIM: // PC <- [A]
-							      pc = m[ir.p].p;
-							break;
-						case JMPIG: // If Rc > 0 Then PC ← Rs Else PC ← PC +1
-							if (reg[ir.rb] > 0) {
-								pc = reg[ir.ra];
-							} else {
+					// --------------------------------------------------------------------------------------------------
+					// FASE DE EXECUCAO DA INSTRUCAO CARREGADA NO ir
+						switch (ir.opc) {       // conforme o opcode (código de operação) executa
+
+							// Instrucoes de Busca e Armazenamento em Memoria
+							case LDI: // Rd ← k        veja a tabela de instrucoes do HW simulado para entender a semantica da instrucao
+								reg[ir.ra] = ir.p;
 								pc++;
-							}
-							break;
-						case JMPIGK: // If RC > 0 then PC <- k else PC++
-							if (reg[ir.rb] > 0) {
+								break;
+							case LDD: // Rd <- [A]
+								if (legal(ir.p)) {
+									reg[ir.ra] = m[ir.p].p;
+									pc++;
+								}
+								break;
+							case LDX: // RD <- [RS] // NOVA
+								if (legal(reg[ir.rb])) {
+									reg[ir.ra] = m[reg[ir.rb]].p;
+									pc++;
+								}
+								break;
+							case STD: // [A] ← Rs
+								if (legal(ir.p)) {
+									m[ir.p].opc = Opcode.DATA;
+									m[ir.p].p = reg[ir.ra];
+									pc++;
+									if (debug) 
+										{   System.out.print("                                  ");   
+											u.dump(ir.p,ir.p+1);							
+										}
+									}
+								break;
+							case STX: // [Rd] ←Rs
+								if (legal(reg[ir.ra])) {
+									m[reg[ir.ra]].opc = Opcode.DATA;
+									m[reg[ir.ra]].p = reg[ir.rb];
+									pc++;
+								}
+								;
+								break;
+							case MOVE: // RD <- RS
+								reg[ir.ra] = reg[ir.rb];
+								pc++;
+								break;
+							// Instrucoes Aritmeticas
+							case ADD: // Rd ← Rd + Rs
+								reg[ir.ra] = reg[ir.ra] + reg[ir.rb];
+								testOverflow(reg[ir.ra]);
+								pc++;
+								break;
+							case ADDI: // Rd ← Rd + k
+								reg[ir.ra] = reg[ir.ra] + ir.p;
+								testOverflow(reg[ir.ra]);
+								pc++;
+								break;
+							case SUB: // Rd ← Rd - Rs
+								reg[ir.ra] = reg[ir.ra] - reg[ir.rb];
+								testOverflow(reg[ir.ra]);
+								pc++;
+								break;
+							case SUBI: // RD <- RD - k // NOVA
+								reg[ir.ra] = reg[ir.ra] - ir.p;
+								testOverflow(reg[ir.ra]);
+								pc++;
+								break;
+							case MULT: // Rd <- Rd * Rs
+								reg[ir.ra] = reg[ir.ra] * reg[ir.rb];
+								testOverflow(reg[ir.ra]);
+								pc++;
+								break;
+
+							// Instrucoes JUMP
+							case JMP: // PC <- k
 								pc = ir.p;
-							} else {
-								pc++;
-							}
-							break;
-						case JMPILK: // If RC < 0 then PC <- k else PC++
-							if (reg[ir.rb] < 0) {
-								pc = ir.p;
-							} else {
-								pc++;
-							}
-							break;
-						case JMPIEK: // If RC = 0 then PC <- k else PC++
-							if (reg[ir.rb] == 0) {
-								pc = ir.p;
-							} else {
-								pc++;
-							}
-							break;
-						case JMPIL: // if Rc < 0 then PC <- Rs Else PC <- PC +1
-							if (reg[ir.rb] < 0) {
-								pc = reg[ir.ra];
-							} else {
-								pc++;
-							}
-							break;
-						case JMPIE: // If Rc = 0 Then PC <- Rs Else PC <- PC +1
-							if (reg[ir.rb] == 0) {
-								pc = reg[ir.ra];
-							} else {
-								pc++;
-							}
-							break;
-						case JMPIGM: // If RC > 0 then PC <- [A] else PC++
-						    if (legal(ir.p)){
-							    if (reg[ir.rb] > 0) {
-								   pc = m[ir.p].p;
-							    } else {
-								  pc++;
-							   }
-						    }
-							break;
-						case JMPILM: // If RC < 0 then PC <- k else PC++
-							if (reg[ir.rb] < 0) {
-								pc = m[ir.p].p;
-							} else {
-								pc++;
-							}
-							break;
-						case JMPIEM: // If RC = 0 then PC <- k else PC++
-							if (reg[ir.rb] == 0) {
-								pc = m[ir.p].p;
-							} else {
-								pc++;
-							}
-							break;
-						case JMPIGT: // If RS>RC then PC <- k else PC++
-							if (reg[ir.ra] > reg[ir.rb]) {
-								pc = ir.p;
-							} else {
-								pc++;
-							}
-							break;
+								break;
+							case JMPIM: // PC <- [A]
+									pc = m[ir.p].p;
+								break;
+							case JMPIG: // If Rc > 0 Then PC ← Rs Else PC ← PC +1
+								if (reg[ir.rb] > 0) {
+									pc = reg[ir.ra];
+								} else {
+									pc++;
+								}
+								break;
+							case JMPIGK: // If RC > 0 then PC <- k else PC++
+								if (reg[ir.rb] > 0) {
+									pc = ir.p;
+								} else {
+									pc++;
+								}
+								break;
+							case JMPILK: // If RC < 0 then PC <- k else PC++
+								if (reg[ir.rb] < 0) {
+									pc = ir.p;
+								} else {
+									pc++;
+								}
+								break;
+							case JMPIEK: // If RC = 0 then PC <- k else PC++
+								if (reg[ir.rb] == 0) {
+									pc = ir.p;
+								} else {
+									pc++;
+								}
+								break;
+							case JMPIL: // if Rc < 0 then PC <- Rs Else PC <- PC +1
+								if (reg[ir.rb] < 0) {
+									pc = reg[ir.ra];
+								} else {
+									pc++;
+								}
+								break;
+							case JMPIE: // If Rc = 0 Then PC <- Rs Else PC <- PC +1
+								if (reg[ir.rb] == 0) {
+									pc = reg[ir.ra];
+								} else {
+									pc++;
+								}
+								break;
+							case JMPIGM: // If RC > 0 then PC <- [A] else PC++
+								if (legal(ir.p)){
+									if (reg[ir.rb] > 0) {
+									pc = m[ir.p].p;
+									} else {
+									pc++;
+								}
+								}
+								break;
+							case JMPILM: // If RC < 0 then PC <- k else PC++
+								if (reg[ir.rb] < 0) {
+									pc = m[ir.p].p;
+								} else {
+									pc++;
+								}
+								break;
+							case JMPIEM: // If RC = 0 then PC <- k else PC++
+								if (reg[ir.rb] == 0) {
+									pc = m[ir.p].p;
+								} else {
+									pc++;
+								}
+								break;
+							case JMPIGT: // If RS>RC then PC <- k else PC++
+								if (reg[ir.ra] > reg[ir.rb]) {
+									pc = ir.p;
+								} else {
+									pc++;
+								}
+								break;
 
-						case DATA: // pc está sobre área supostamente de dados
-							irpt = Interrupts.intInstrucaoInvalida;
-							break;
+							case DATA: // pc está sobre área supostamente de dados
+								irpt = Interrupts.intInstrucaoInvalida;
+								break;
 
-						// Chamadas de sistema
-						case SYSCALL:
-							sysCall.handle(); // <<<<< aqui desvia para rotina de chamada de sistema, no momento so
-												// temos IO
-							pc++;
-							break;
+							// Chamadas de sistema
+							case SYSCALL:
+								sysCall.handle(); // <<<<< aqui desvia para rotina de chamada de sistema, no momento so
+								pc++;
+								break;
 
-						case STOP: // por enquanto, para execucao
-							sysCall.stop();
-							cpuStop = true;
-							break;
+							case STOP: // por enquanto, para execucao
+								sysCall.stop();
+								processEnd = true;
+								break;
 
-						// Inexistente
-						default:
-							irpt = Interrupts.intInstrucaoInvalida;
-							break;
+							// Inexistente
+							default:
+								irpt = Interrupts.intInstrucaoInvalida;
+								break;
+						}
+					}
+
+					if (processEnd) break;
+
+					// --------------------------------------------------------------------------------------------------
+					// VERIFICA INTERRUPÇÃO !!! - TERCEIRA FASE DO CICLO DE INSTRUÇÕES
+					if (irpt != Interrupts.noInterrupt) { // existe interrupção
+						ih.handle(irpt);                  // desvia para rotina de tratamento - esta rotina é do SO
+						break;
 					}
 				}
-				// --------------------------------------------------------------------------------------------------
-				// VERIFICA INTERRUPÇÃO !!! - TERCEIRA FASE DO CICLO DE INSTRUÇÕES
-				if (irpt != Interrupts.noInterrupt) { // existe interrupção
-					ih.handle(irpt);                  // desvia para rotina de tratamento - esta rotina é do SO
-				}
+
+				semaphoreScheduler.release();
 			} // FIM DO CICLO DE UMA INSTRUÇÃO
 		}
 	}
@@ -596,13 +606,7 @@ public class Sistema {
 			System.out.println("Parando processo id " + running.getId());
 
 			running = null;
-		}
-
-		// liga ou desliga modo de execução em que CPU print cada instrução executada
-		public void toggleTrace() {
-			// Tendi nada
-		}
-		
+		}	
 	}
 	// -------------------------------------------------------------------------------------------------------
 	// ------------------- S I S T E M A
@@ -611,7 +615,7 @@ public class Sistema {
 	public HW hw;
 	public SO so;
 	public Programs progs;
-	public Queue<PCB> ready;
+	public static Queue<PCB> ready;
 
 	public Sistema(int tamMem, int tamPag) {
 		hw = new HW(tamMem);           // memoria do HW tem tamMem palavras
@@ -745,7 +749,7 @@ public class Sistema {
 		public ProcessManager(MemoryManager mm) {
 			this.mm = mm;
 			this.processes = new ArrayList<>();
-			this.scheduler = new Scheduler(processes);
+			this.scheduler = new Scheduler();
 		}
 
 		public List<PCB> getProcesses() {
@@ -793,7 +797,6 @@ public class Sistema {
 		}
 	}
 
-
 	public class PCB {
 		private static int idCounter;
 		private int id;
@@ -826,17 +829,29 @@ public class Sistema {
 	}
 
 	public class Scheduler {
-		private List<PCB> processes;
+		private PCB running;
 
-		public Scheduler(List<PCB> processes) {
-			this.processes = processes;
+		public Scheduler() {
+			this.running = null;
 		}
 
 		public void roundRobin() throws InterruptedException {
 			while (true) {
 				semaphoreScheduler.acquire();
-				
-				// logica de escalonamento (guarda o estado atual da cpu, seleciona o processo e restaura a cpu dado o estado do processo)
+
+				if (running != null) {
+					running.setContext(hw.cpu.pc, hw.cpu.reg);
+
+					running.toggleRunning();
+					running.toggleReady();
+				}
+
+				running = ready.poll();
+
+				running.toggleRunning();
+				running.toggleReady();
+
+				hw.cpu.setContext(running.getPc(), running.getRegState());
 
 				semaphoreCPU.release();
 			}
