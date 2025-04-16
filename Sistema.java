@@ -56,6 +56,11 @@ public class Sistema {
 		noInterrupt, intEnderecoInvalido, intInstrucaoInvalida, intOverflow, intSTOP, processEnd, roundRobin;
 	}
 
+	// Ver onde devo chamar as funcoes dado os parametros
+	public static int mmu(int pc, int pageSize, int bloco) {
+		return pageSize * bloco + (pc % pageSize);
+	}
+
 	public class CPU {
 		private static final int Q = 4;
 		private int maxInt; // valores maximo e minimo para inteiros nesta cpu
@@ -173,7 +178,7 @@ public class Sistema {
 								break;
 							case LDX: // RD <- [RS] // NOVA
 								if (legal(reg[ir.rb])) {
-									reg[ir.ra] = m[f(reg[ir.rb])].p;
+									reg[ir.ra] = m[(reg[ir.rb])].p;
 									pc++;
 								}
 								break;
@@ -661,12 +666,12 @@ public class Sistema {
 					switch (program) {
 						case 1:
 							so.pm.createProcess(progs.retrieveProgram("fatorial"));
-							// so.mm.alloc(progs.retrieveProgram("fatorial").length);
 							break;
 
 						case 2:
 							so.pm.createProcess(progs.retrieveProgram("fatorialV2"));
-							break;	
+							break;
+
 						case 0:
 							System.out.println("Retornando ao menu de operações do sistema operacional...");
 							break;
