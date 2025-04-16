@@ -3,7 +3,7 @@ import java.util.concurrent.Semaphore;
 
 public class Sistema {
 	Semaphore semaphoreCPU = new Semaphore(0); 
-	Semaphore semaphoreScheduler = new Semaphore(1);
+	Semaphore semaphoreScheduler = new Semaphore(0);
 
 	// -------------------------------------------------------------------------------------------------------
 	// --------------------- H A R D W A R E - definicoes de HW
@@ -139,6 +139,7 @@ public class Sistema {
 					
 					// --------------------------------------------------------------------------------------------------
 					// FASE DE FETCH
+					System.out.println("Exec j= " + j + "  pc: " + pc + "  irpt: " + irpt);
 					if (legal(pc)) { // pc valido
 						ir = m[pc];  // <<<<<<<<<<<< AQUI faz FETCH - busca posicao da memoria apontada por pc, guarda em ir
 									// resto é dump de debug
@@ -172,7 +173,7 @@ public class Sistema {
 								break;
 							case LDX: // RD <- [RS] // NOVA
 								if (legal(reg[ir.rb])) {
-									reg[ir.ra] = m[reg[ir.rb]].p;
+									reg[ir.ra] = m[f(reg[ir.rb])].p;
 									pc++;
 								}
 								break;
@@ -317,8 +318,8 @@ public class Sistema {
 								break;
 
 							case STOP: // por enquanto, para execucao
-								sysCall.stop();
-								processEnd = true;
+								// sysCall.stop();
+								// processEnd = true;
 								break;
 
 							// Inexistente
@@ -328,7 +329,8 @@ public class Sistema {
 						}
 					}
 
-					if (processEnd) break;
+					if (processEnd) irpt = Interrupts.processEnd;
+					else if (j == Q - 1) irpt = Interrupts.roundRobin;
 
 					// --------------------------------------------------------------------------------------------------
 					// VERIFICA INTERRUPÇÃO !!! - TERCEIRA FASE DO CICLO DE INSTRUÇÕES
@@ -338,7 +340,7 @@ public class Sistema {
 					}
 				}
 
-				semaphoreScheduler.release();
+				
 			} // FIM DO CICLO DE UMA INSTRUÇÃO
 		}
 	}
@@ -395,9 +397,13 @@ public class Sistema {
 	// ----------------------------------
 	public class InterruptHandling {
 		private HW hw; // referencia ao hw se tiver que setar algo
+		private ProcessManager pm;
+		private Scheduler scheduler;
 
-		public InterruptHandling(HW _hw) {
+		public InterruptHandling(HW _hw, ProcessManager _pm, Scheduler _scheduler) {
 			hw = _hw;
+			pm = _pm;
+			scheduler = _scheduler;
 		}
 
 		public void handle(Interrupts irpt) {
@@ -407,9 +413,14 @@ public class Sistema {
 			switch(irpt) {
 				case roundRobin:
 					System.out.println("RoundRobin");
+					semaphoreScheduler.release();
 					break;
 				case processEnd:
 					System.out.println("ProcessEnd");
+					pm.dealloc(running.getId());
+
+					if (!ready.isEmpty()) semaphoreScheduler.release();
+					else System.out.println("Sem processos prontos para execução.");
 					break;
 				default:
 					System.out.println("Interrupção não tratada: " + irpt);
@@ -510,14 +521,20 @@ public class Sistema {
 		public MemoryManager mm;
 		public ProcessManager pm;
 		public PCB running;
+		public Scheduler scheduler;
 
 		public SO(HW hw, int tamMem, int tamPag) {
-			ih = new InterruptHandling(hw); // rotinas de tratamento de int
 			sc = new SysCallHandling(hw); // chamadas de sistema
 			hw.cpu.setAddressOfHandlers(ih, sc);
 			utils = new Utilities(hw);
 			mm = new MemoryManager(tamMem, tamPag);
 			pm = new ProcessManager(mm);
+			scheduler = new Scheduler();
+			ih = new InterruptHandling(hw, pm, scheduler); // rotinas de tratamento de int
+
+			SchedulerRunning schedulerRunning = new SchedulerRunning(scheduler);
+			Thread schedulerThread = new Thread(schedulerRunning);
+			schedulerThread.start();
 		}
 
 		// cria um processo na memória
@@ -588,25 +605,12 @@ public class Sistema {
 		// lista a memória entre posições início e fim, independente do processo
 		public void dumpM (int start, int end) {
 			utils.dump(start, end);
-		}
-
-		// executa o processo com id fornecido. se não houver processo, retorna erro.
-		public void exec() {
-			if (ready.isEmpty()) {
-				System.out.println("Nenhum processo pronto para execução.");
-				return;
-			}
-
-			running = ready.poll();
-
-			System.out.println("Executando processo id " + running.getId());
-
-			hw.cpu.setContext(running.getPc(), running.getRegState());
-
-			System.out.println("Parando processo id " + running.getId());
-
-			running = null;
 		}	
+
+		public void execAll() {
+
+			semaphoreScheduler.release();
+		}
 	}
 	// -------------------------------------------------------------------------------------------------------
 	// ------------------- S I S T E M A
@@ -616,6 +620,7 @@ public class Sistema {
 	public SO so;
 	public Programs progs;
 	public static Queue<PCB> ready;
+	public PCB running;
 
 	public Sistema(int tamMem, int tamPag) {
 		hw = new HW(tamMem);           // memoria do HW tem tamMem palavras
@@ -633,7 +638,8 @@ public class Sistema {
 		int op;
 		do {
 			System.out.println("\n\nOPERAÇÕES");
-			System.out.println("1 - Executar programa");
+			System.out.println("1 - Criar processo");
+			System.out.println("2 - Executar processos");
 			System.out.println("0 - Sair");
 			System.out.print("> Informe a operação que deseja realizar: ");
 			op = in.nextInt();
@@ -654,10 +660,13 @@ public class Sistema {
 
 					switch (program) {
 						case 1:
-							so.mm.alloc(progs.retrieveProgram("fatorial").length);
+							so.pm.createProcess(progs.retrieveProgram("fatorial"));
 							// so.mm.alloc(progs.retrieveProgram("fatorial").length);
 							break;
 
+						case 2:
+							so.pm.createProcess(progs.retrieveProgram("fatorialV2"));
+							break;	
 						case 0:
 							System.out.println("Retornando ao menu de operações do sistema operacional...");
 							break;
@@ -670,6 +679,11 @@ public class Sistema {
 			
 				case 0:
 					System.out.println("Encerrando sistema operacional...");
+					break;
+
+				case 2:
+					System.out.println("Executando processos...");
+					so.execAll();
 					break;
 
 				default:
@@ -729,6 +743,8 @@ public class Sistema {
 				System.out.println(i + ": " + pagesTable[i]);
 			}
 
+			System.out.println("pagestable: " + Arrays.toString(pagesTable) + " | SIZE: " + pagesTable.length);
+
 			return pagesTable;
 		}
 
@@ -744,12 +760,10 @@ public class Sistema {
 	public class ProcessManager {
 		private MemoryManager mm;
 		private List<PCB> processes;
-		private Scheduler scheduler;
 
 		public ProcessManager(MemoryManager mm) {
 			this.mm = mm;
 			this.processes = new ArrayList<>();
-			this.scheduler = new Scheduler();
 		}
 
 		public List<PCB> getProcesses() {
@@ -757,18 +771,33 @@ public class Sistema {
 		}
 
 		public PCB createProcess(Word[] program) {
+			System.out.println("CRIANDO PROCESSO...");
 			int wordsNumber = program.length;
 			int[] pagesTable = mm.alloc(wordsNumber);
+			System.out.println("PagesTable: " + Arrays.toString(pagesTable) + " | SIZE: " + pagesTable.length);
 			if (pagesTable.length == 0) {
 				return null;
 			}
 			
 			int pageSize = this.mm.getPageSize();
-			int pc = pagesTable[0] * pageSize;
+			int pc = 0;
+			System.out.println("PC: " + pc + " | PageSize: " + pageSize + " | PagesTable: " + Arrays.toString(pagesTable));
 			PCB pcb = new PCB(pc, pagesTable);
 
+			// private void loadProgram(Word[] p) {
+			// 	Word[] m = hw.mem.pos; // m[] é o array de posições memória do hw
+			// 	for (int i = 0; i < p.length; i++) {
+			// 		m[i].opc = p[i].opc;
+			// 		m[i].ra = p[i].ra;
+			// 		m[i].rb = p[i].rb;
+			// 		m[i].p = p[i].p;
+			// 	}
+			// }
+			
+
 			for (int frame : pagesTable) {
-				for (int i = frame * pageSize; i < (frame + 1) * pageSize; i++) {
+				System.out.println("Frame: " + frame + " | PageSize: " + pageSize);
+				for (int i = frame * pageSize; i < (frame) * pageSize; i++) {
 					Word w = program[i];
 					hw.mem.pos[i] = w;
 					System.out.println("Posição " + i + " recebeu " + program[i].opc);
@@ -777,6 +806,7 @@ public class Sistema {
 			
 			processes.add(pcb);
 			ready.add(pcb);
+			pcb.toggleReady();
 
 			return pcb;
 		}
@@ -828,16 +858,32 @@ public class Sistema {
 		}
 	}
 
-	public class Scheduler {
-		private PCB running;
+	public class SchedulerRunning implements Runnable {
+		private Scheduler scheduler;
 
-		public Scheduler() {
-			this.running = null;
+		public SchedulerRunning(Scheduler scheduler) {
+			this.scheduler = scheduler;
 		}
 
+		public void run() {
+			System.out.println("Thread Scheduler em execução.");
+			try {
+				scheduler.roundRobin();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	public class Scheduler {
 		public void roundRobin() throws InterruptedException {
 			while (true) {
 				semaphoreScheduler.acquire();
+
+				if (ready.isEmpty()) {
+					System.out.println("\nSem processos prontos para execução.");
+					continue;
+				}
 
 				if (running != null) {
 					running.setContext(hw.cpu.pc, hw.cpu.reg);
@@ -847,6 +893,7 @@ public class Sistema {
 				}
 
 				running = ready.poll();
+				System.out.println("\nSCHEDULER ) " + running.getId() + " - " + running.getPc() + " - " + running.isRunning() + " - " + running.isReady());
 
 				running.toggleRunning();
 				running.toggleReady();
