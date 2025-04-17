@@ -56,9 +56,10 @@ public class Sistema {
 		noInterrupt, intEnderecoInvalido, intInstrucaoInvalida, intOverflow, intSTOP, processEnd, roundRobin;
 	}
 
-	// Ver onde devo chamar as funcoes dado os parametros
-	public static int mmu(int pc, int pageSize, int bloco) {
-		return pageSize * bloco + (pc % pageSize);
+	public int mmu(int pc) {
+		int page = pc / 4;
+		int block = running.getPagesTable()[page];
+		return 4 * block + (pc % 4);
 	}
 
 	public class CPU {
@@ -139,14 +140,17 @@ public class Sistema {
 				semaphoreCPU.acquire();
 				boolean processEnd = false;
 
+				System.out.println("\n Rodando processo: " + running.getId());
+
 				// RoundRobin
 				for(int j = 0; j < Q; j++) {
 					
 					// --------------------------------------------------------------------------------------------------
 					// FASE DE FETCH
-					System.out.println("Exec j= " + j + "  pc: " + pc + "  irpt: " + irpt);
-					if (legal(pc)) { // pc valido
-						ir = m[pc];  // <<<<<<<<<<<< AQUI faz FETCH - busca posicao da memoria apontada por pc, guarda em ir
+					int physPC = mmu(pc); // mmu faz a traducao de endereco logico para fisico, se necessario
+					System.out.println("\nExec j=" + j + " pc(log)=" + pc + " pc(phy)=" + physPC + " irpt=" + irpt);
+					if (legal(physPC)) { // pc valido
+						ir = m[physPC];  // <<<<<<<<<<<< AQUI faz FETCH - busca posicao da memoria apontada por pc, guarda em ir
 									// resto é dump de debug
 						if (debug) {
 							System.out.print("                                              regs: ");
@@ -171,32 +175,36 @@ public class Sistema {
 								pc++;
 								break;
 							case LDD: // Rd <- [A]
-								if (legal(ir.p)) {
-									reg[ir.ra] = m[ir.p].p;
+								int phys1 = mmu(ir.p);
+								if (legal(phys1)) {
+									reg[ir.ra] = m[phys1].p;
 									pc++;
 								}
 								break;
 							case LDX: // RD <- [RS] // NOVA
-								if (legal(reg[ir.rb])) {
-									reg[ir.ra] = m[(reg[ir.rb])].p;
+								int phys2 = mmu(reg[ir.rb]);
+								if (legal(phys2)) {
+									reg[ir.ra] = m[phys2].p;
 									pc++;
 								}
 								break;
 							case STD: // [A] ← Rs
-								if (legal(ir.p)) {
-									m[ir.p].opc = Opcode.DATA;
-									m[ir.p].p = reg[ir.ra];
+								int phys3 = mmu(ir.p);
+								if (legal(phys3)) {
+									m[phys3].opc = Opcode.DATA;
+									m[phys3].p = reg[ir.ra];
 									pc++;
 									if (debug) 
 										{   System.out.print("                                  ");   
-											u.dump(ir.p,ir.p+1);							
+											u.dump(phys3,phys3+1);							
 										}
 									}
 								break;
 							case STX: // [Rd] ←Rs
-								if (legal(reg[ir.ra])) {
-									m[reg[ir.ra]].opc = Opcode.DATA;
-									m[reg[ir.ra]].p = reg[ir.rb];
+								int phys4 = mmu(reg[ir.ra]);
+								if (legal(phys4)) {
+									m[phys4].opc = Opcode.DATA;
+									m[phys4].p = reg[ir.rb];
 									pc++;
 								}
 								;
@@ -237,7 +245,8 @@ public class Sistema {
 								pc = ir.p;
 								break;
 							case JMPIM: // PC <- [A]
-									pc = m[ir.p].p;
+								int phys5 = mmu(ir.p);
+									pc = m[phys5].p;
 								break;
 							case JMPIG: // If Rc > 0 Then PC ← Rs Else PC ← PC +1
 								if (reg[ir.rb] > 0) {
@@ -282,24 +291,27 @@ public class Sistema {
 								}
 								break;
 							case JMPIGM: // If RC > 0 then PC <- [A] else PC++
-								if (legal(ir.p)){
+								int phys6 = mmu(ir.p);
+								if (legal(phys6)){
 									if (reg[ir.rb] > 0) {
-									pc = m[ir.p].p;
+									pc = m[phys6].p;
 									} else {
 									pc++;
 								}
 								}
 								break;
 							case JMPILM: // If RC < 0 then PC <- k else PC++
+								int phys7 = mmu(ir.p);
 								if (reg[ir.rb] < 0) {
-									pc = m[ir.p].p;
+									pc = m[phys7].p;
 								} else {
 									pc++;
 								}
 								break;
 							case JMPIEM: // If RC = 0 then PC <- k else PC++
+								int phys8 = mmu(ir.p);
 								if (reg[ir.rb] == 0) {
-									pc = m[ir.p].p;
+									pc = m[phys8].p;
 								} else {
 									pc++;
 								}
@@ -323,8 +335,7 @@ public class Sistema {
 								break;
 
 							case STOP: // por enquanto, para execucao
-								// sysCall.stop();
-								// processEnd = true;
+								processEnd = true;
 								break;
 
 							// Inexistente
@@ -339,7 +350,8 @@ public class Sistema {
 
 					// --------------------------------------------------------------------------------------------------
 					// VERIFICA INTERRUPÇÃO !!! - TERCEIRA FASE DO CICLO DE INSTRUÇÕES
-					if (irpt != Interrupts.noInterrupt) { // existe interrupção
+					if (irpt != Interrupts.noInterrupt) {
+						//System.out.println(ih + " - " + irpt);
 						ih.handle(irpt);                  // desvia para rotina de tratamento - esta rotina é do SO
 						break;
 					}
@@ -422,10 +434,11 @@ public class Sistema {
 					break;
 				case processEnd:
 					System.out.println("ProcessEnd");
-					pm.dealloc(running.getId());
 
-					if (!ready.isEmpty()) semaphoreScheduler.release();
-					else System.out.println("Sem processos prontos para execução.");
+					pm.dealloc(running.getId());
+					running.finished();
+
+					semaphoreScheduler.release();
 					break;
 				default:
 					System.out.println("Interrupção não tratada: " + irpt);
@@ -530,12 +543,12 @@ public class Sistema {
 
 		public SO(HW hw, int tamMem, int tamPag) {
 			sc = new SysCallHandling(hw); // chamadas de sistema
-			hw.cpu.setAddressOfHandlers(ih, sc);
 			utils = new Utilities(hw);
 			mm = new MemoryManager(tamMem, tamPag);
 			pm = new ProcessManager(mm);
 			scheduler = new Scheduler();
 			ih = new InterruptHandling(hw, pm, scheduler); // rotinas de tratamento de int
+			hw.cpu.setAddressOfHandlers(ih, sc);
 
 			SchedulerRunning schedulerRunning = new SchedulerRunning(scheduler);
 			Thread schedulerThread = new Thread(schedulerRunning);
@@ -777,36 +790,30 @@ public class Sistema {
 
 		public PCB createProcess(Word[] program) {
 			System.out.println("CRIANDO PROCESSO...");
+
 			int wordsNumber = program.length;
 			int[] pagesTable = mm.alloc(wordsNumber);
-			System.out.println("PagesTable: " + Arrays.toString(pagesTable) + " | SIZE: " + pagesTable.length);
-			if (pagesTable.length == 0) {
-				return null;
-			}
+
+			if (pagesTable.length == 0) return null;
 			
-			int pageSize = this.mm.getPageSize();
 			int pc = 0;
+			int pageSize = this.mm.getPageSize();
+
 			System.out.println("PC: " + pc + " | PageSize: " + pageSize + " | PagesTable: " + Arrays.toString(pagesTable));
-			PCB pcb = new PCB(pc, pagesTable);
 
-			// private void loadProgram(Word[] p) {
-			// 	Word[] m = hw.mem.pos; // m[] é o array de posições memória do hw
-			// 	for (int i = 0; i < p.length; i++) {
-			// 		m[i].opc = p[i].opc;
-			// 		m[i].ra = p[i].ra;
-			// 		m[i].rb = p[i].rb;
-			// 		m[i].p = p[i].p;
-			// 	}
-			// }
-			
+			PCB pcb = new PCB(pc, pagesTable);	
+			pcb.setContext(pc, new int[10]);
 
-			for (int frame : pagesTable) {
-				System.out.println("Frame: " + frame + " | PageSize: " + pageSize);
-				for (int i = frame * pageSize; i < (frame) * pageSize; i++) {
-					Word w = program[i];
-					hw.mem.pos[i] = w;
-					System.out.println("Posição " + i + " recebeu " + program[i].opc);
-				}
+			int logicalAddr = 0;
+			for (Word w : program) {
+				int page  = logicalAddr / mm.getPageSize();
+				int frame = pagesTable[page];
+				int phys  = frame * mm.getPageSize() + (logicalAddr % mm.getPageSize());
+				hw.mem.pos[phys].opc = w.opc;
+				hw.mem.pos[phys].ra  = w.ra;
+				hw.mem.pos[phys].rb  = w.rb;
+				hw.mem.pos[phys].p   = w.p;
+				logicalAddr++;
 			}
 			
 			processes.add(pcb);
@@ -818,17 +825,19 @@ public class Sistema {
 
 		public void dealloc(int id) {
 			PCB process = processes.get(id);
-			int[] pagesTable = process.getPagesTable();
-
-			int pageSize = this.mm.getPageSize();
-			for (int frame : pagesTable) {
-				for (int i = frame * pageSize; i < (frame + 1) * pageSize; i++) {
-					hw.mem.pos[i] = new Word(Opcode.___, -1, -1, -1);
-				}
-			}
-
+			// int[] pagesTable = process.getPagesTable();
+			
+			mm.free(process.getPagesTable());
+			
+			// int pageSize = this.mm.getPageSize();
+			// for (int frame : pagesTable) {
+			// 	for (int i = frame * pageSize; i < (frame + 1) * pageSize; i++) {
+			// 		hw.mem.pos[i] = new Word(Opcode.___, -1, -1, -1);
+			// 	}
+			// }
+			
 			processes.remove(id);
-			ready.remove(process);
+			// ready.remove(process); -> TALVEZ N PRECISA SAIR
 		}
 	}
 
@@ -840,12 +849,15 @@ public class Sistema {
 		private boolean running;
 		private boolean ready;
 		private int[] pagesTable;
+		private boolean finished;
 
 		public PCB(int pc, int[] pagesTable) {
 			idCounter++;
 			this.id = idCounter;
 			this.pc = pc;
 			this.pagesTable = pagesTable;
+			this.regState = new int[10];
+			this.finished = false;
 		}
 
         public int getId() { return this.id; }
@@ -854,8 +866,10 @@ public class Sistema {
 		public int[] getRegState() { return this.regState; }
         public boolean isRunning() { return this.running; }
         public boolean isReady() { return this.ready; }
+		public boolean isFinished() { return this.finished; }
 		private void toggleRunning() { this.running = !this.running; }
 		private void toggleReady() { this.ready = !this.ready; }	
+		public void finished() { this.finished = true; }
 
 		public void setContext(int pc, int[] reg) {
 			this.pc = pc;
@@ -885,24 +899,24 @@ public class Sistema {
 			while (true) {
 				semaphoreScheduler.acquire();
 
-				if (ready.isEmpty()) {
-					System.out.println("\nSem processos prontos para execução.");
-					continue;
-				}
-
-				if (running != null) {
+				if (running != null && !running.isFinished()) {
 					running.setContext(hw.cpu.pc, hw.cpu.reg);
 
 					running.toggleRunning();
 					running.toggleReady();
+
+					ready.add(running);
+				}
+
+				if (ready.isEmpty()) {
+					System.out.println("\nSem processos prontos para execução.");
+					running = null;
+					continue;
 				}
 
 				running = ready.poll();
-				System.out.println("\nSCHEDULER ) " + running.getId() + " - " + running.getPc() + " - " + running.isRunning() + " - " + running.isReady());
-
 				running.toggleRunning();
 				running.toggleReady();
-
 				hw.cpu.setContext(running.getPc(), running.getRegState());
 
 				semaphoreCPU.release();
