@@ -139,7 +139,8 @@ public class Sistema {
 				// Espera o scheduler liberar a CPU para o processo
 				semaphoreCPU.acquire();
 				boolean processEnd = false;
-
+				irpt = Interrupts.noInterrupt;
+				
 				System.out.println("\n Rodando processo: " + running.getId());
 
 				// RoundRobin
@@ -440,6 +441,16 @@ public class Sistema {
 
 					semaphoreScheduler.release();
 					break;
+				case intInstrucaoInvalida:
+					System.out.println("Instrucao invalida - A execucao do processo " + running.getId() + " sera pausada e o processo cancelado.");
+
+					// Se o processo tem uma instrucao invalida ele e desalocado da memoria e retirado da fila de processos
+					pm.dealloc(running.getId());
+					running.finished();
+
+					semaphoreScheduler.release();
+					break;
+				case 
 				default:
 					System.out.println("Interrupção não tratada: " + irpt);
 					break;
@@ -542,12 +553,12 @@ public class Sistema {
 		public Scheduler scheduler;
 
 		public SO(HW hw, int tamMem, int tamPag) {
-			sc = new SysCallHandling(hw); // chamadas de sistema
+			sc = new SysCallHandling(hw);
 			utils = new Utilities(hw);
 			mm = new MemoryManager(tamMem, tamPag);
 			pm = new ProcessManager(mm);
 			scheduler = new Scheduler();
-			ih = new InterruptHandling(hw, pm, scheduler); // rotinas de tratamento de int
+			ih = new InterruptHandling(hw, pm, scheduler);
 			hw.cpu.setAddressOfHandlers(ih, sc);
 
 			SchedulerRunning schedulerRunning = new SchedulerRunning(scheduler);
@@ -626,7 +637,6 @@ public class Sistema {
 		}	
 
 		public void execAll() {
-
 			semaphoreScheduler.release();
 		}
 	}
