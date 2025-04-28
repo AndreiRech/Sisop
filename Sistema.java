@@ -6,6 +6,43 @@ public class Sistema {
 	Semaphore semaphoreScheduler = new Semaphore(0);
 
 	// -------------------------------------------------------------------------------------------------------
+	// --------------------- T H R E A D S - definicoes de threads
+
+	public class CpuRunnable implements Runnable {
+		private CPU cpu;
+
+		public CpuRunnable(CPU cpu) {
+			this.cpu = cpu;
+		}
+
+		public void run() {
+			System.out.println("Thread CPU em execução.");
+			try {
+				cpu.run();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	public class SchedulerRunning implements Runnable {
+		private Scheduler scheduler;
+
+		public SchedulerRunning(Scheduler scheduler) {
+			this.scheduler = scheduler;
+		}
+
+		public void run() {
+			System.out.println("Thread Scheduler em execução.");
+			try {
+				scheduler.roundRobin();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	// -------------------------------------------------------------------------------------------------------
 	// --------------------- H A R D W A R E - definicoes de HW
 	// ----------------------------------------------
 
@@ -368,23 +405,6 @@ public class Sistema {
 
 	// ------------------- HW - constituido de CPU e MEMORIA
 	// -----------------------------------------------
-	public class CpuRunnable implements Runnable {
-		private CPU cpu;
-
-		public CpuRunnable(CPU cpu) {
-			this.cpu = cpu;
-		}
-
-		public void run() {
-			System.out.println("Thread CPU em execução.");
-			try {
-				cpu.run();
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-		}
-	}
-
 	public class HW {
 		public Memory mem;
 		public CPU cpu;
@@ -450,7 +470,6 @@ public class Sistema {
 
 					semaphoreScheduler.release();
 					break;
-				case 
 				default:
 					System.out.println("Interrupção não tratada: " + irpt);
 					break;
@@ -573,29 +592,31 @@ public class Sistema {
 			return running == null;
 		}
 
+		// lista todos processos existentes
+		public void ps() {
+			for (PCB pcb : pm.getProcesses()) {
+				System.out.println(pcb);
+			}
+		}
+
+		public void execAll() {
+			if (ready.isEmpty()) {
+				System.out.println("Não há processos prontos para execução.");
+				return;
+			}
+
+			semaphoreScheduler.release();
+		}
+
 		// retira o processo id do sistema, tenha ele executado ou não
 		public boolean rmProcess(int id) {
-			PCB target = null;
-			int index = -1;
-
-			for (PCB pcb : pm.getProcesses()) {
-				if (pcb.getId() == id) {
-					target = pcb;
-					index = id;
-					break;
-				}
+			if (id < 0) {
+				System.out.println("ID inválido.");
+				return false;
 			}
 
-			if (target != null) {
-				mm.free(target.getPagesTable());
-				pm.dealloc(id); // Não sei se precisa aqui
-
-				pm.getProcesses().remove(index);
-
-				return true;
-			}
-
-			return false;
+			pm.dealloc(id);
+			return true;
 		}
 
 		// lista o conteúdo do PCB e o conteúdo da memória do processo com id
@@ -611,35 +632,43 @@ public class Sistema {
 
 			if (target != null) {
 				int[] pages = target.getPagesTable();
-				int tamPag = mm.getPageSize();
+				int pageSize = mm.getPageSize();
 
 				System.out.println("Dump | id " + id + ":");
 
-				// Sim, vai bilingue mesmo
 				for (int i = 0; i < pages.length; i++) {
-					int inicio = pages[i] * tamPag;
-					int fim = inicio + tamPag;
-					utils.dump(inicio, fim);
+					int start = pages[i] * pageSize;
+					int end = start + pageSize;
+					utils.dump(start, end);
 				}
 			}
 		}
 
-		// lista todos processos existentes
-		public void ps() {
-			for (PCB pcb : pm.getProcesses()) {
-				System.out.println("ID: " + pcb.getId() + " | PC: " + pcb.getPc());
-			}
-		}
-
-		// lista a memória entre posições início e fim, independente do processo
-		public void dumpM (int start, int end) {
+		// Lista a memória entre posições início e fim, independente do processo
+		public void dumpM(int start, int end) {
 			utils.dump(start, end);
-		}	
-
-		public void execAll() {
-			semaphoreScheduler.release();
 		}
+
+		// Liga modo de execução em que CPU print cada instrução executada
+		public void traceOn() { 
+			hw.cpu.debug = true;
+		}
+
+		// Desliga o modo acima
+		public void traceOff() {
+			hw.cpu.debug = false;
+		}
+
+		// public void exit() {} do sistema operacional
 	}
+
+	// -------------------------------------------------------------------------------------------------------
+	// ------------------- instancia e testa sistema
+	public static void main(String[] args) {
+		Sistema sistema = new Sistema(1024, 4);
+		sistema.run();
+	}
+
 	// -------------------------------------------------------------------------------------------------------
 	// ------------------- S I S T E M A
 	// --------------------------------------------------------------------
@@ -667,7 +696,11 @@ public class Sistema {
 		do {
 			System.out.println("\n\nOPERAÇÕES");
 			System.out.println("1 - Criar processo");
-			System.out.println("2 - Executar processos");
+			System.out.println("2 - Listar processos");
+			System.out.println("3 - Remover processo por ID");
+			System.out.println("4 - Executar processos");
+			System.out.println("5 - Dump de processo");
+			System.out.println("6 - Dump de memória");
 			System.out.println("0 - Sair");
 			System.out.print("> Informe a operação que deseja realizar: ");
 			op = in.nextInt();
@@ -675,8 +708,8 @@ public class Sistema {
 			switch (op) {
 				case 1:
 					System.out.println("\n\nPROGRAMAS");
-					System.out.println("1 - Fatorial");
-					System.out.println("2 - FatorialV2");
+					System.out.println("1 - fatorial");
+					System.out.println("2 - fatorialV2");
 					System.out.println("3 - progMinimo");
 					System.out.println("4 - fibonacci10");
 					System.out.println("5 - fibonacci10v2");
@@ -688,11 +721,31 @@ public class Sistema {
 
 					switch (program) {
 						case 1:
-							so.pm.createProcess(progs.retrieveProgram("fatorial"));
+							so.newProcess(progs.retrieveProgram("fatorial"));
 							break;
 
 						case 2:
-							so.pm.createProcess(progs.retrieveProgram("fatorialV2"));
+							so.newProcess(progs.retrieveProgram("fatorialV2"));
+							break;
+						
+						case 3:
+							so.newProcess(progs.retrieveProgram("progMinimo"));
+							break;
+
+						case 4:
+							so.newProcess(progs.retrieveProgram("fibonacci10"));
+							break;
+
+						case 5:
+							so.newProcess(progs.retrieveProgram("fibonacci10v2"));
+							break;
+
+						case 6:
+							so.newProcess(progs.retrieveProgram("PB"));
+							break;
+
+						case 7:
+							so.newProcess(progs.retrieveProgram("PC"));
 							break;
 
 						case 0:
@@ -704,14 +757,72 @@ public class Sistema {
 							break;
 					}
 					break;
-			
-				case 0:
-					System.out.println("Encerrando sistema operacional...");
+				
+				
+				case 2:
+					System.out.println("Listando processos...");
+					so.ps();
 					break;
 
-				case 2:
-					System.out.println("Executando processos...");
+				case 3:
+					System.out.println("\n\nPROCESSOS");
+					so.ps();
+					System.out.print("> Informe o processo que deseja remover: ");
+					int processId = in.nextInt();
+
+					if (so.rmProcess(processId)) {
+						System.out.println("Processo " + processId + " removido com sucesso.");
+					} else {
+						System.out.println("ERRO: Processo não encontrado.");
+					}
+
+					break;
+
+				case 4:
+					System.out.println("Executando todos os processos...");
 					so.execAll();
+					break;
+				
+				case 5:
+					System.out.println("Dump de processo por ID...");
+					System.out.print("> Informe o processo que deseja realizar dump: ");
+					processId = in.nextInt();
+
+					if (processId < 0) {
+						System.out.println("ID inválido.");
+						break;
+					}
+
+					so.dump(processId);
+					break;
+
+				case 6:
+					System.out.println("Dump de memória...");
+					System.out.print("> Informe o início do dump de memória: ");
+					int dumpStart = in.nextInt();
+					System.out.print("> Informe o fim do dump de memória: ");
+					int dumpEnd = in.nextInt();
+
+					if (dumpStart < 0 || dumpEnd < 0 || dumpStart >= hw.mem.pos.length || dumpEnd >= hw.mem.pos.length || dumpStart > dumpEnd) {
+						System.out.println("ERRO: Intervalo inválido.");
+						break;
+					}
+
+					so.dumpM(dumpStart, dumpEnd);
+					break;
+
+				case 7:
+					System.out.println("Trace on...");
+					so.traceOn();
+					break;
+					
+				case 8:
+					System.out.println("Trace off...");
+					so.traceOff();
+					break;
+
+				case 0:
+					System.out.println("Encerrando sistema operacional...");
 					break;
 
 				default:
@@ -784,6 +895,7 @@ public class Sistema {
 		}
 	}
 	
+	// @Erik Suris tem q fazer outra thread pro usuario ficar colocando programa
 
 	public class ProcessManager {
 		private MemoryManager mm;
@@ -834,10 +946,21 @@ public class Sistema {
 		}
 
 		public void dealloc(int id) {
-			PCB process = processes.get(id);
-			// int[] pagesTable = process.getPagesTable();
-			
-			mm.free(process.getPagesTable());
+			PCB target = null;
+
+			for (PCB pcb : processes) {
+				if (pcb.getId() == id) {
+					target = pcb;
+					break;
+				}
+			}
+
+			if (target == null) {
+				System.out.println("Gerente de Processos: Processo não encontrado.");
+				return;
+			}
+
+			mm.free(target.getPagesTable());
 			
 			// int pageSize = this.mm.getPageSize();
 			// for (int frame : pagesTable) {
@@ -846,8 +969,9 @@ public class Sistema {
 			// 	}
 			// }
 			
-			processes.remove(id);
-			// ready.remove(process); -> TALVEZ N PRECISA SAIR
+			processes.remove(target);
+			ready.remove(target);
+			target.finished();
 		}
 	}
 
@@ -856,9 +980,9 @@ public class Sistema {
 		private int id;
 		private int pc;
 		private int[] regState;
+		private int[] pagesTable;
 		private boolean running;
 		private boolean ready;
-		private int[] pagesTable;
 		private boolean finished;
 
 		public PCB(int pc, int[] pagesTable) {
@@ -872,8 +996,8 @@ public class Sistema {
 
         public int getId() { return this.id; }
         public int getPc() { return this.pc; }
-		public int[] getPagesTable() { return pagesTable; }
 		public int[] getRegState() { return this.regState; }
+		public int[] getPagesTable() { return pagesTable; }
         public boolean isRunning() { return this.running; }
         public boolean isReady() { return this.ready; }
 		public boolean isFinished() { return this.finished; }
@@ -885,22 +1009,9 @@ public class Sistema {
 			this.pc = pc;
 			this.regState = reg;
 		}
-	}
 
-	public class SchedulerRunning implements Runnable {
-		private Scheduler scheduler;
-
-		public SchedulerRunning(Scheduler scheduler) {
-			this.scheduler = scheduler;
-		}
-
-		public void run() {
-			System.out.println("Thread Scheduler em execução.");
-			try {
-				scheduler.roundRobin();
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
+		public String toString() {
+			return "ID: " + id + " | PC: " + pc + " | PagesTable: " + Arrays.toString(pagesTable) + " | RegState: " + Arrays.toString(regState) + " | Running: " + running + " | Ready: " + ready + " | Finished: " + finished;
 		}
 	}
 
@@ -938,13 +1049,6 @@ public class Sistema {
 	// ------------------- S I S T E M A - fim
 	// --------------------------------------------------------------
 	// -------------------------------------------------------------------------------------------------------
-
-	// -------------------------------------------------------------------------------------------------------
-	// ------------------- instancia e testa sistema
-	public static void main(String args[]) {
-		Sistema s = new Sistema(1024, 4);
-		s.run();
-	}
 
 	// -------------------------------------------------------------------------------------------------------
 	// -------------------------------------------------------------------------------------------------------
