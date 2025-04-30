@@ -821,6 +821,7 @@ public class Sistema {
 			}
 
 		} while (op != 0);
+		in.close();
 	}
 
 	// Gerenciador de memória
@@ -903,11 +904,26 @@ public class Sistema {
 		public PCB createProcess(Word[] program) {
 			System.out.println("CRIANDO PROCESSO...");
 
-			int wordsNumber = program.length;
-			int[] pagesTable = mm.alloc(wordsNumber);
+			int maxLogicalAddr = program.length - 1;
+			for (Word w : program) {
+				switch (w.opc) {
+					case STD, LDD, LDX, STX, JMPIM, JMPIGM, JMPILM, JMPIEM:
+						if (w.p > maxLogicalAddr) {
+							maxLogicalAddr = w.p;
+						}
+						break;
+					default:
+						break;
+				}
+			}
 
-			if (pagesTable.length == 0) return null;
-			
+			int wordsNumber = maxLogicalAddr + 1;
+			int[] pagesTable = mm.alloc(wordsNumber);
+			if (pagesTable == null || pagesTable.length == 0) {
+				System.out.println("Gerente de Processos: Memória insuficiente para alocar o processo.");
+				return null;
+			}
+
 			int pc = 0;
 			int pageSize = this.mm.getPageSize();
 
@@ -927,15 +943,15 @@ public class Sistema {
 				hw.mem.pos[phys].p   = w.p;
 				logicalAddr++;
 			}
-			
+
 			processes.add(pcb);
 			ready.add(pcb);
 			pcb.toggleReady();
-
 			if (autoMode) semaphoreScheduler.release();
 
 			return pcb;
 		}
+		
 
 		public void dealloc(int id) {
 			PCB target = null;
