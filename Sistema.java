@@ -817,9 +817,7 @@ public class Sistema {
 
 				case 0:
 					System.out.println("Encerrando sistema operacional...");
-
 					shutdown = true;
-					semaphoreScheduler.release(workerThreads.size());
 
 					for (Thread t : workerThreads) {
 						t.interrupt();
