@@ -172,6 +172,7 @@ public class Sistema {
 
 		public void run() throws InterruptedException {                               // execucao da CPU supoe que o contexto da CPU, vide acima, 
 			cpuStop = false;
+			Thread.sleep(5000);
 			while (!cpuStop) {      // ciclo de instrucoes. acaba cfe resultado da exec da instrucao, veja cada caso.
 				// Espera o scheduler liberar a CPU para o processo
 				semaphoreCPU.acquire();
@@ -436,12 +437,10 @@ public class Sistema {
 	public class InterruptHandling {
 		private HW hw; // referencia ao hw se tiver que setar algo
 		private ProcessManager pm;
-		private Scheduler scheduler;
 
-		public InterruptHandling(HW _hw, ProcessManager _pm, Scheduler _scheduler) {
+		public InterruptHandling(HW _hw, ProcessManager _pm) {
 			hw = _hw;
 			pm = _pm;
-			scheduler = _scheduler;
 		}
 
 		public void handle(Interrupts irpt) {
@@ -455,6 +454,8 @@ public class Sistema {
 					break;
 				case processEnd:
 					System.out.println("ProcessEnd");
+
+					if (running == null) return;
 
 					pm.dealloc(running.getId());
 					running.finished();
@@ -518,16 +519,6 @@ public class Sistema {
 			hw = _hw;
 		}
 
-		private void loadProgram(Word[] p) {
-			Word[] m = hw.mem.pos; // m[] é o array de posições memória do hw
-			for (int i = 0; i < p.length; i++) {
-				m[i].opc = p[i].opc;
-				m[i].ra = p[i].ra;
-				m[i].rb = p[i].rb;
-				m[i].p = p[i].p;
-			}
-		}
-
 		// dump da memória
 		public void dump(Word w) { // funcoes de DUMP nao existem em hardware - colocadas aqui para facilidade
 			System.out.print("[ ");
@@ -549,17 +540,6 @@ public class Sistema {
 				dump(m[i]);
 			}
 		}
-
-		// private void loadAndExec(Word[] p) {
-		// 	loadProgram(p); // carga do programa na memoria
-		// 	System.out.println("---------------------------------- programa carregado na memoria");
-		// 	dump(0, p.length); // dump da memoria nestas posicoes
-		// 	// hw.cpu.setContext(0); // seta pc para endereço 0 - ponto de entrada dos programas
-		// 	System.out.println("---------------------------------- inicia execucao ");
-		// 	hw.cpu.run(); // cpu roda programa ate parar
-		// 	System.out.println("---------------------------------- memoria após execucao ");
-		// 	dump(0, p.length); // dump da memoria com resultado
-		// }
 	}
 
 	public class SO {
@@ -577,7 +557,7 @@ public class Sistema {
 			mm = new MemoryManager(tamMem, tamPag);
 			pm = new ProcessManager(mm);
 			scheduler = new Scheduler();
-			ih = new InterruptHandling(hw, pm, scheduler);
+			ih = new InterruptHandling(hw, pm);
 			hw.cpu.setAddressOfHandlers(ih, sc);
 
 			SchedulerRunning schedulerRunning = new SchedulerRunning(scheduler);
@@ -678,6 +658,7 @@ public class Sistema {
 	public Programs progs;
 	public static Queue<PCB> ready;
 	public PCB running;
+	public boolean autoMode = true;
 
 	public Sistema(int tamMem, int tamPag) {
 		hw = new HW(tamMem);           // memoria do HW tem tamMem palavras
@@ -701,6 +682,9 @@ public class Sistema {
 			System.out.println("4 - Executar processos");
 			System.out.println("5 - Dump de processo");
 			System.out.println("6 - Dump de memória");
+			System.out.println("7 - Trace on");
+			System.out.println("8 - Trace off");
+			System.out.println("9 - Toggle autoMode");
 			System.out.println("0 - Sair");
 			System.out.print("> Informe a operação que deseja realizar: ");
 			op = in.nextInt();
@@ -779,6 +763,7 @@ public class Sistema {
 					break;
 
 				case 4:
+					if (autoMode) return;
 					System.out.println("Executando todos os processos...");
 					so.execAll();
 					break;
@@ -819,6 +804,11 @@ public class Sistema {
 				case 8:
 					System.out.println("Trace off...");
 					so.traceOff();
+					break;
+
+				case 9:
+					autoMode = !autoMode;
+					System.out.println("Modo automático: " + (autoMode ? "Ativado" : "Desativado"));
 					break;
 
 				case 0:
@@ -941,6 +931,8 @@ public class Sistema {
 			processes.add(pcb);
 			ready.add(pcb);
 			pcb.toggleReady();
+
+			if (autoMode) semaphoreScheduler.release();
 
 			return pcb;
 		}
