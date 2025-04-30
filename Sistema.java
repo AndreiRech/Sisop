@@ -2,6 +2,8 @@ import java.util.*;
 import java.util.concurrent.Semaphore;
 
 public class Sistema {
+	private volatile boolean shutdown = false;
+	private final List<Thread> workerThreads = new ArrayList<>();
 	Semaphore semaphoreCPU = new Semaphore(0); 
 	Semaphore semaphoreScheduler = new Semaphore(0);
 
@@ -20,7 +22,7 @@ public class Sistema {
 			try {
 				cpu.run();
 			} catch (InterruptedException e) {
-				e.printStackTrace();
+				// e.printStackTrace();
 			}
 		}
 	}
@@ -37,7 +39,7 @@ public class Sistema {
 			try {
 				scheduler.roundRobin();
 			} catch (InterruptedException e) {
-				e.printStackTrace();
+				// e.printStackTrace();
 			}
 		}
 	}
@@ -171,9 +173,9 @@ public class Sistema {
 		}
 
 		public void run() throws InterruptedException {                               // execucao da CPU supoe que o contexto da CPU, vide acima, 
-			cpuStop = false;
+			// cpuStop = false;
 			Thread.sleep(5000);
-			while (!cpuStop) {      // ciclo de instrucoes. acaba cfe resultado da exec da instrucao, veja cada caso.
+			while (!shutdown) {      // ciclo de instrucoes. acaba cfe resultado da exec da instrucao, veja cada caso.
 				// Espera o scheduler liberar a CPU para o processo
 				semaphoreCPU.acquire();
 				boolean processEnd = false;
@@ -416,6 +418,7 @@ public class Sistema {
 
 			CpuRunnable cpuRunnable = new CpuRunnable(cpu);
 			Thread cpuThread = new Thread(cpuRunnable);
+			workerThreads.add(cpuThread);
 			cpuThread.start();
 		}
 	}
@@ -562,6 +565,7 @@ public class Sistema {
 
 			SchedulerRunning schedulerRunning = new SchedulerRunning(scheduler);
 			Thread schedulerThread = new Thread(schedulerRunning);
+			workerThreads.add(schedulerThread);
 			schedulerThread.start();
 		}
 
@@ -813,6 +817,21 @@ public class Sistema {
 
 				case 0:
 					System.out.println("Encerrando sistema operacional...");
+
+					shutdown = true;
+					semaphoreScheduler.release(workerThreads.size());
+
+					for (Thread t : workerThreads) {
+						t.interrupt();
+					}
+					
+					for (Thread t : workerThreads) {
+						try {
+							t.join();
+						} catch (InterruptedException e) { /* ignore */ }
+					}
+					
+					System.out.println("Todas as threads encerradas.");
 					break;
 
 				default:
@@ -1025,7 +1044,7 @@ public class Sistema {
 
 	public class Scheduler {
 		public void roundRobin() throws InterruptedException {
-			while (true) {
+			while (!shutdown) {
 				semaphoreScheduler.acquire();
 
 				if (running != null && !running.isFinished()) {
