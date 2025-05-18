@@ -150,9 +150,6 @@ public class Sistema {
 		private InterruptHandling ih;    // significa desvio para rotinas de tratamento de Int - se int ligada, desvia
 		private SysCallHandling sysCall; // significa desvio para tratamento de chamadas de sistema
 
-		private boolean cpuStop;    // flag para parar CPU - caso de interrupcao que acaba o processo, ou chamada stop - 
-									// nesta versao acaba o sistema no fim do prog
-
 		                            // auxilio aa depuração
 		private boolean debug;      // se true entao mostra cada instrucao em execucao
 		private Utilities u;        // para debug (dump)
@@ -1153,8 +1150,7 @@ public class Sistema {
 					PCB p = blocked.peek();
 					p.setRegState(9, input);
 
-
-
+					in.close();
 				} else {
 					System.out.println("Console: IO escrita");
 
