@@ -2,8 +2,17 @@ import java.util.*;
 import java.util.concurrent.Semaphore;
 
 public class Sistema {
+	private volatile boolean shutdown = false;
+	private final List<Thread> workerThreads = new ArrayList<>();
+
+	private static boolean ioRequest = false;
+
 	Semaphore semaphoreCPU = new Semaphore(0); 
 	Semaphore semaphoreScheduler = new Semaphore(0);
+	Semaphore semaphoreConsole = new Semaphore(0);
+
+	Queue<Interrupts> irpt = new LinkedList<>();
+	Queue<SysCalls> sysc = new LinkedList<>();
 
 	// -------------------------------------------------------------------------------------------------------
 	// --------------------- T H R E A D S - definicoes de threads
@@ -20,7 +29,7 @@ public class Sistema {
 			try {
 				cpu.run();
 			} catch (InterruptedException e) {
-				e.printStackTrace();
+				// e.printStackTrace();
 			}
 		}
 	}
@@ -37,7 +46,24 @@ public class Sistema {
 			try {
 				scheduler.roundRobin();
 			} catch (InterruptedException e) {
-				e.printStackTrace();
+				// e.printStackTrace();
+			}
+		}
+	}
+
+	public class ConsoleRunnable implements Runnable {
+		private Console console;
+
+		public ConsoleRunnable(Console console) {
+			this.console = console;
+		}
+
+		public void run() {
+			System.out.println("Thread Console em execução.");
+			try {
+				console.run();
+			} catch (InterruptedException e) {
+				// e.printStackTrace();
 			}
 		}
 	}
@@ -90,7 +116,15 @@ public class Sistema {
 	}
 
 	public enum Interrupts {           // possiveis interrupcoes que esta CPU gera
-		noInterrupt, intEnderecoInvalido, intInstrucaoInvalida, intOverflow, intSTOP, processEnd, roundRobin;
+		intEnderecoInvalido, intInstrucaoInvalida, intOverflow, intSTOP, roundRobin, ioFinished;
+	}
+
+	public enum SysCalls {
+		ioRequest, processEnd
+	}
+
+	public enum ProcessStates {
+		blocked, running, ready, finished
 	}
 
 	public int mmu(int pc) {
@@ -107,7 +141,6 @@ public class Sistema {
 		private int pc;     // ... composto de program counter,
 		private Word ir;    // instruction register,
 		private int[] reg;  // registradores da CPU
-		private Interrupts irpt; // durante instrucao, interrupcao pode ser sinalizada
 		                    // FIM CONTEXTO DA CPU: tudo que precisa sobre o estado de um processo para
 		                    // executa-lo
 		                    // nas proximas versoes isto pode modificar
@@ -150,14 +183,14 @@ public class Sistema {
 			if (e >= 0 && e < m.length) {
 				return true;
 			} else {
-				irpt = Interrupts.intEnderecoInvalido;    // se nao for liga interrupcao no meio da exec da instrucao
+				irpt.add(Interrupts.intEnderecoInvalido);    // se nao for liga interrupcao no meio da exec da instrucao
 				return false;
 			}
 		}
 
 		private boolean testOverflow(int v) {             // toda operacao matematica deve avaliar se ocorre overflow
 			if ((v < minInt) || (v > maxInt)) {
-				irpt = Interrupts.intOverflow;            // se houver liga interrupcao no meio da exec da instrucao
+				irpt.add(Interrupts.intOverflow);            // se houver liga interrupcao no meio da exec da instrucao
 				return false;
 			}
 			;
@@ -166,18 +199,15 @@ public class Sistema {
 
 		public void setContext(int _pc, int[] _reg) {                 // usado para setar o contexto da cpu para rodar um processo
 			reg = _reg;                                   
-			pc = _pc;                                     // pc cfe endereco logico
-			irpt = Interrupts.noInterrupt;                // reset da interrupcao registrada
+			pc = _pc;                                     // pc cfe endereco logico         
 		}
 
 		public void run() throws InterruptedException {                               // execucao da CPU supoe que o contexto da CPU, vide acima, 
-			cpuStop = false;
-			Thread.sleep(5000);
-			while (!cpuStop) {      // ciclo de instrucoes. acaba cfe resultado da exec da instrucao, veja cada caso.
+			// cpuStop = false;
+			while (!shutdown) {      // ciclo de instrucoes. acaba cfe resultado da exec da instrucao, veja cada caso.
 				// Espera o scheduler liberar a CPU para o processo
 				semaphoreCPU.acquire();
 				boolean processEnd = false;
-				irpt = Interrupts.noInterrupt;
 				
 				System.out.println("\n Rodando processo: " + running.getId());
 
@@ -364,12 +394,12 @@ public class Sistema {
 								break;
 
 							case DATA: // pc está sobre área supostamente de dados
-								irpt = Interrupts.intInstrucaoInvalida;
+								irpt.add(Interrupts.intInstrucaoInvalida);
 								break;
 
 							// Chamadas de sistema
 							case SYSCALL:
-								sysCall.handle(); // <<<<< aqui desvia para rotina de chamada de sistema, no momento so
+								sysc.add(SysCalls.ioRequest); // <<<<< aqui desvia para rotina de chamada de sistema, no momento so
 								pc++;
 								break;
 
@@ -379,20 +409,31 @@ public class Sistema {
 
 							// Inexistente
 							default:
-								irpt = Interrupts.intInstrucaoInvalida;
+								irpt.add(Interrupts.intInstrucaoInvalida);
 								break;
 						}
 					}
 
-					if (processEnd) irpt = Interrupts.processEnd;
-					else if (j == Q - 1) irpt = Interrupts.roundRobin;
+					if (processEnd) sysc.add(SysCalls.processEnd);
+					else if (j == Q - 1) irpt.add(Interrupts.roundRobin);
 
 					// --------------------------------------------------------------------------------------------------
 					// VERIFICA INTERRUPÇÃO !!! - TERCEIRA FASE DO CICLO DE INSTRUÇÕES
-					if (irpt != Interrupts.noInterrupt) {
-						//System.out.println(ih + " - " + irpt);
-						ih.handle(irpt);                  // desvia para rotina de tratamento - esta rotina é do SO
-						break;
+					if (!irpt.isEmpty()) {
+						for (Interrupts i : irpt) {
+							ih.handle(i);                  // desvia para rotina de tratamento - esta rotina é do SO
+							irpt.poll();
+							break;
+						}
+					}
+
+					if (!sysc.isEmpty()) {
+						for (SysCalls s : sysc) {
+							sysCall.handle(s);             // desvia para rotina de tratamento - esta rotina é do SO
+							sysc.poll();
+							j = Q;
+							break;
+						}
 					}
 				}
 
@@ -416,6 +457,7 @@ public class Sistema {
 
 			CpuRunnable cpuRunnable = new CpuRunnable(cpu);
 			Thread cpuThread = new Thread(cpuRunnable);
+			workerThreads.add(cpuThread);
 			cpuThread.start();
 		}
 	}
@@ -452,24 +494,22 @@ public class Sistema {
 					System.out.println("RoundRobin");
 					semaphoreScheduler.release();
 					break;
-				case processEnd:
-					System.out.println("ProcessEnd");
-
-					if (running == null) return;
-
-					pm.dealloc(running.getId());
-					running.finished();
-
-					semaphoreScheduler.release();
-					break;
 				case intInstrucaoInvalida:
 					System.out.println("Instrucao invalida - A execucao do processo " + running.getId() + " sera pausada e o processo cancelado.");
 
 					// Se o processo tem uma instrucao invalida ele e desalocado da memoria e retirado da fila de processos
 					pm.dealloc(running.getId());
-					running.finished();
+					running.setStates(ProcessStates.finished);
 
 					semaphoreScheduler.release();
+					break;
+				case ioFinished:
+					System.out.println("IO Finished");
+
+					PCB p = blocked.poll();
+					ready.add(p);
+					p.setStates(ProcessStates.ready);
+
 					break;
 				default:
 					System.out.println("Interrupção não tratada: " + irpt);
@@ -477,33 +517,63 @@ public class Sistema {
 			}
 		}
 	}
+	//TODO -> console e chamado pela syscall e deve passar os registradores para salvar na memoria (deve ser o fisico nao o logico)
 
 	// ------------------- C H A M A D A S D E S I S T E M A - rotinas de tratamento
 	// ----------------------
 	public class SysCallHandling {
 		private HW hw; // referencia ao hw se tiver que setar algo
+		private ProcessManager pm;
 
-		public SysCallHandling(HW _hw) {
+		public SysCallHandling(HW _hw, ProcessManager _pm) {
 			hw = _hw;
+			pm = _pm;
 		}
 
-		public void stop() { // chamada de sistema indicando final de programa
-							 // nesta versao cpu simplesmente pára
-			System.out.println("                                               SYSCALL STOP");
-		}
-
-		public void handle() { // chamada de sistema 
-			                   // suporta somente IO, com parametros 
-							   // reg[8] = in ou out    e reg[9] endereco do inteiro
+		public void handle(SysCalls sysc) { // chamada de sistema - suporta somente IO, com parametros - reg[8] = in ou out    e reg[9] endereco do inteiro
 			System.out.println("SYSCALL pars:  " + hw.cpu.reg[8] + " / " + hw.cpu.reg[9]);
+			System.out.println("sysc: " + sysc);	
 
-			if  (hw.cpu.reg[8]==1){
-				  // leitura ...
+			switch (sysc){
+				case ioRequest:
+					System.out.println("IoRequest");
+					ready.remove(running);
+					blocked.add(running);
+					
+					running.setStates(ProcessStates.blocked);
+					running.setContext(hw.cpu.pc, hw.cpu.reg);
+				
+					switch(hw.cpu.reg[8]) {
+						case 1:
+							ioRequest = true;
+							semaphoreConsole.release();
+							break;
+						case 2:
+							// escrita - escreve o conteuodo da memoria na posicao dada em reg[9]
+							ioRequest = false;
+							semaphoreConsole.release();
+							break;
+						default:
+							System.out.println("  PARAMETRO INVALIDO");	
+							break;
+					}
 
-			} else if (hw.cpu.reg[8]==2){
-				  // escrita - escreve o conteuodo da memoria na posicao dada em reg[9]
-				  System.out.println("OUT:   "+ hw.mem.pos[hw.cpu.reg[9]].p);
-			} else {System.out.println("  PARAMETRO INVALIDO"); }		
+					semaphoreScheduler.release();
+					break;
+				case processEnd:
+					System.out.println("ProcessEnd");
+
+					if (running == null) return;
+
+					pm.dealloc(running.getId());
+					running.setStates(ProcessStates.finished);
+
+					semaphoreScheduler.release();
+					break;
+				default:
+					System.out.println("Syscall nao tratada");
+					break;
+			}
 		}
 	}
 
@@ -550,19 +620,28 @@ public class Sistema {
 		public ProcessManager pm;
 		public PCB running;
 		public Scheduler scheduler;
+		public Console console;
 
 		public SO(HW hw, int tamMem, int tamPag) {
-			sc = new SysCallHandling(hw);
 			utils = new Utilities(hw);
 			mm = new MemoryManager(tamMem, tamPag);
 			pm = new ProcessManager(mm);
 			scheduler = new Scheduler();
+			console = new Console();
 			ih = new InterruptHandling(hw, pm);
+			sc = new SysCallHandling(hw,pm);
 			hw.cpu.setAddressOfHandlers(ih, sc);
 
 			SchedulerRunning schedulerRunning = new SchedulerRunning(scheduler);
 			Thread schedulerThread = new Thread(schedulerRunning);
+
+			ConsoleRunnable consoleRunnable = new ConsoleRunnable(console);
+			Thread consoleThread = new Thread(consoleRunnable);
+
+			workerThreads.add(schedulerThread);
+			workerThreads.add(consoleThread);
 			schedulerThread.start();
+			consoleThread.start();
 		}
 
 		// cria um processo na memória
@@ -657,6 +736,7 @@ public class Sistema {
 	public SO so;
 	public Programs progs;
 	public static Queue<PCB> ready;
+	public static Queue<PCB> blocked;
 	public PCB running;
 	public boolean autoMode = true;
 
@@ -664,6 +744,7 @@ public class Sistema {
 		hw = new HW(tamMem);           // memoria do HW tem tamMem palavras
 		so = new SO(hw, tamMem, tamPag);
 		ready = new LinkedList<>();
+		blocked = new LinkedList<>();
 
 		hw.cpu.setUtilities(so.utils); // permite cpu fazer dump de memoria ao avancar
 		progs = new Programs();
@@ -813,6 +894,19 @@ public class Sistema {
 
 				case 0:
 					System.out.println("Encerrando sistema operacional...");
+					shutdown = true;
+
+					for (Thread t : workerThreads) {
+						t.interrupt();
+					}
+					
+					for (Thread t : workerThreads) {
+						try {
+							t.join();
+						} catch (InterruptedException e) { /* ignore */ }
+					}
+					
+					System.out.println("Todas as threads encerradas.");
 					break;
 
 				default:
@@ -821,6 +915,7 @@ public class Sistema {
 			}
 
 		} while (op != 0);
+		in.close();
 	}
 
 	// Gerenciador de memória
@@ -885,8 +980,6 @@ public class Sistema {
 		}
 	}
 	
-	// @Erik Suris tem q fazer outra thread pro usuario ficar colocando programa
-
 	public class ProcessManager {
 		private MemoryManager mm;
 		private List<PCB> processes;
@@ -903,11 +996,26 @@ public class Sistema {
 		public PCB createProcess(Word[] program) {
 			System.out.println("CRIANDO PROCESSO...");
 
-			int wordsNumber = program.length;
-			int[] pagesTable = mm.alloc(wordsNumber);
+			int maxLogicalAddr = program.length - 1;
+			for (Word w : program) {
+				switch (w.opc) {
+					case STD, LDD, LDX, STX, JMPIM, JMPIGM, JMPILM, JMPIEM:
+						if (w.p > maxLogicalAddr) {
+							maxLogicalAddr = w.p;
+						}
+						break;
+					default:
+						break;
+				}
+			}
 
-			if (pagesTable.length == 0) return null;
-			
+			int wordsNumber = maxLogicalAddr + 1;
+			int[] pagesTable = mm.alloc(wordsNumber);
+			if (pagesTable == null || pagesTable.length == 0) {
+				System.out.println("Gerente de Processos: Memória insuficiente para alocar o processo.");
+				return null;
+			}
+
 			int pc = 0;
 			int pageSize = this.mm.getPageSize();
 
@@ -927,15 +1035,15 @@ public class Sistema {
 				hw.mem.pos[phys].p   = w.p;
 				logicalAddr++;
 			}
-			
+
 			processes.add(pcb);
 			ready.add(pcb);
-			pcb.toggleReady();
-
+			pcb.setStates(ProcessStates.ready);
 			if (autoMode) semaphoreScheduler.release();
 
 			return pcb;
 		}
+		
 
 		public void dealloc(int id) {
 			PCB target = null;
@@ -954,16 +1062,9 @@ public class Sistema {
 
 			mm.free(target.getPagesTable());
 			
-			// int pageSize = this.mm.getPageSize();
-			// for (int frame : pagesTable) {
-			// 	for (int i = frame * pageSize; i < (frame + 1) * pageSize; i++) {
-			// 		hw.mem.pos[i] = new Word(Opcode.___, -1, -1, -1);
-			// 	}
-			// }
-			
 			processes.remove(target);
 			ready.remove(target);
-			target.finished();
+			target.setStates(ProcessStates.finished);
 		}
 	}
 
@@ -973,9 +1074,7 @@ public class Sistema {
 		private int pc;
 		private int[] regState;
 		private int[] pagesTable;
-		private boolean running;
-		private boolean ready;
-		private boolean finished;
+		private ProcessStates state;
 
 		public PCB(int pc, int[] pagesTable) {
 			idCounter++;
@@ -983,40 +1082,40 @@ public class Sistema {
 			this.pc = pc;
 			this.pagesTable = pagesTable;
 			this.regState = new int[10];
-			this.finished = false;
 		}
 
         public int getId() { return this.id; }
         public int getPc() { return this.pc; }
 		public int[] getRegState() { return this.regState; }
 		public int[] getPagesTable() { return pagesTable; }
-        public boolean isRunning() { return this.running; }
-        public boolean isReady() { return this.ready; }
-		public boolean isFinished() { return this.finished; }
-		private void toggleRunning() { this.running = !this.running; }
-		private void toggleReady() { this.ready = !this.ready; }	
-		public void finished() { this.finished = true; }
+        public void setStates(ProcessStates ps) { this.state = ps; }
+		public ProcessStates getState() { return this.state; }
 
 		public void setContext(int pc, int[] reg) {
 			this.pc = pc;
 			this.regState = reg;
 		}
 
+		public void setRegState(int reg, int value) {
+			this.regState[reg] = value;
+		}
+
+		@Override
 		public String toString() {
-			return "ID: " + id + " | PC: " + pc + " | PagesTable: " + Arrays.toString(pagesTable) + " | RegState: " + Arrays.toString(regState) + " | Running: " + running + " | Ready: " + ready + " | Finished: " + finished;
+			return "PCB [id=" + id + ", pc=" + pc + ", regState=" + Arrays.toString(regState) + ", pagesTable="
+					+ Arrays.toString(pagesTable) + ", state=" + state + "]";
 		}
 	}
 
 	public class Scheduler {
 		public void roundRobin() throws InterruptedException {
-			while (true) {
+			while (!shutdown) {
 				semaphoreScheduler.acquire();
 
-				if (running != null && !running.isFinished()) {
+				if (running != null && running.getState() != ProcessStates.finished) {
 					running.setContext(hw.cpu.pc, hw.cpu.reg);
 
-					running.toggleRunning();
-					running.toggleReady();
+					running.setStates(ProcessStates.ready);
 
 					ready.add(running);
 				}
@@ -1028,8 +1127,7 @@ public class Sistema {
 				}
 
 				running = ready.poll();
-				running.toggleRunning();
-				running.toggleReady();
+				running.setStates(ProcessStates.running);
 				hw.cpu.setContext(running.getPc(), running.getRegState());
 
 				semaphoreCPU.release();
@@ -1037,7 +1135,38 @@ public class Sistema {
 		}
 	}
 	
+	public class Console {
+		public void run() throws InterruptedException {
+			while (!shutdown) {
+				Scanner in = new Scanner(System.in);
 
+				semaphoreConsole.acquire();
+				System.out.println("------------------------------------- [ CONSOLE ] -------------------------------------");
+				
+				// TODO -> Isso aqui deveria ser feito pelo DMA
+				if (ioRequest) {
+					System.out.println("Console: IO leitura");
+
+					System.out.println("IN:   ");
+					int input = in.nextInt();
+
+					PCB p = blocked.peek();
+					p.setRegState(9, input);
+
+
+
+				} else {
+					System.out.println("Console: IO escrita");
+
+					PCB p = blocked.peek();
+
+					System.out.println("OUT:   "+ p.getRegState()[9]);
+				}
+
+				irpt.add(Interrupts.ioFinished);
+			}
+		}
+	}
 	// ------------------- S I S T E M A - fim
 	// --------------------------------------------------------------
 	// -------------------------------------------------------------------------------------------------------
