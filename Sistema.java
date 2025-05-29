@@ -87,6 +87,17 @@ public class Sistema {
 		}
 	}
 
+	public class Disk {
+		public Word[] pos;
+
+		public Disk(int size) {
+			pos = new Word[size];
+			for (int i = 0; i < pos.length; i++) {
+				pos[i] = new Word(Opcode.___, -1, -1, -1);
+			}
+		}
+	}
+
 	public class Word {    // cada posicao da memoria tem uma instrucao (ou um dado)
 		public Opcode opc; //
 		public int ra;     // indice do primeiro registrador da operacao (Rs ou Rd cfe opcode na tabela)
@@ -116,7 +127,7 @@ public class Sistema {
 	}
 
 	public enum Interrupts {           // possiveis interrupcoes que esta CPU gera
-		intEnderecoInvalido, intInstrucaoInvalida, intOverflow, intSTOP, roundRobin, ioFinished;
+		intEnderecoInvalido, intInstrucaoInvalida, intOverflow, intSTOP, roundRobin, ioFinished, pageFault, pageSaved, pageLoaded;
 	}
 
 	public enum SysCalls {
@@ -129,7 +140,13 @@ public class Sistema {
 
 	public int mmu(int pc) {
 		int page = pc / 4;
-		int block = running.getPagesTable()[page];
+
+		if (!running.getPagesTable()[page].isValid()) {
+			System.out.println("Pagina " + page + " não válida. PAGE FAULT!!!!");
+			irpt.add(Interrupts.pageFault);
+		}
+
+		int block = running.getPagesTable()[page].getFrame();
 		return 4 * block + (pc % 4);
 	}
 
@@ -146,6 +163,7 @@ public class Sistema {
 		                    // nas proximas versoes isto pode modificar
 
 		private Word[] m;   // m é o array de memória "física", CPU tem uma ref a m para acessar
+		private Word[] d;   // d é o array de disco "físico", CPU tem uma ref a d para acessar
 
 		private InterruptHandling ih;    // significa desvio para rotinas de tratamento de Int - se int ligada, desvia
 		private SysCallHandling sysCall; // significa desvio para tratamento de chamadas de sistema
@@ -154,10 +172,11 @@ public class Sistema {
 		private boolean debug;      // se true entao mostra cada instrucao em execucao
 		private Utilities u;        // para debug (dump)
 
-		public CPU(Memory _mem, boolean _debug) { // ref a MEMORIA passada na criacao da CPU
+		public CPU(Memory _mem, Disk _disk, boolean _debug) { // ref a MEMORIA passada na criacao da CPU
 			maxInt = 32767;            // capacidade de representacao modelada
 			minInt = -32767;           // se exceder deve gerar interrupcao de overflow
 			m = _mem.pos;              // usa o atributo 'm' para acessar a memoria, só para ficar mais pratico
+			d = _disk.pos;             // usa o atributo 'd' para acessar o disco, só para ficar mais pratico
 			reg = new int[10];         // aloca o espaço dos registradores - regs 8 e 9 usados somente para IO
 
 			debug = _debug;            // se true, print da instrucao em execucao
@@ -215,6 +234,7 @@ public class Sistema {
 					// FASE DE FETCH
 					int physPC = mmu(pc); // mmu faz a traducao de endereco logico para fisico, se necessario
 					System.out.println("\nExec j=" + j + " pc(log)=" + pc + " pc(phy)=" + physPC + " irpt=" + irpt);
+
 					if (legal(physPC)) { // pc valido
 						ir = m[physPC];  // <<<<<<<<<<<< AQUI faz FETCH - busca posicao da memoria apontada por pc, guarda em ir
 									// resto é dump de debug
@@ -446,11 +466,13 @@ public class Sistema {
 	// -----------------------------------------------
 	public class HW {
 		public Memory mem;
+		public Disk disk;
 		public CPU cpu;
 
 		public HW(int tamMem) {
 			mem = new Memory(tamMem);
-			cpu = new CPU(mem, true); // true liga debug
+			disk = new Disk(4096);
+			cpu = new CPU(mem, disk, true); // true liga debug
 
 			CpuRunnable cpuRunnable = new CpuRunnable(cpu);
 			Thread cpuThread = new Thread(cpuRunnable);
@@ -506,6 +528,29 @@ public class Sistema {
 					PCB p = blocked.poll();
 					ready.add(p);
 					p.setStates(ProcessStates.ready);
+
+					break;
+				case intEnderecoInvalido:
+					// System.out.println("Endereco invalido - A execucao do processo " + running.getId() + " sera pausada e o processo cancelado.");
+
+					// pm.dealloc(running.getId());
+					// running.setStates(ProcessStates.finished);
+
+					// semaphoreScheduler.release();
+					break;
+				case pageFault:
+					System.out.println("Page Fault - A pagina nao esta carregada na memoria");
+
+					ready.remove(running);
+					blocked.add(running);
+					
+					running.setStates(ProcessStates.blocked);
+					running.setContext(hw.cpu.pc, hw.cpu.reg);
+				
+					// Aqui deve-se carregar a pagina na memoria, se nao tiver espaço deve-se desalocar uma pagina
+
+
+					semaphoreScheduler.release();
 
 					break;
 				default:
@@ -687,13 +732,13 @@ public class Sistema {
 			}
 
 			if (target != null) {
-				int[] pages = target.getPagesTable();
+				PageTableEntry[] pages = target.getPagesTable();
 				int pageSize = mm.getPageSize();
 
 				System.out.println("Dump | id " + id + ":");
 
 				for (int i = 0; i < pages.length; i++) {
-					int start = pages[i] * pageSize;
+					int start = pages[i].getFrame() * pageSize;
 					int end = start + pageSize;
 					utils.dump(start, end);
 				}
@@ -922,7 +967,7 @@ public class Sistema {
 		private int framesNumber;
 		private boolean[] allocatedFrames;
 
-		public MemoryManager (int memorySize, int pageSize) {
+		public MemoryManager(int memorySize, int pageSize) {
 			this.pageSize = pageSize;
 			this.framesNumber = memorySize / pageSize;
 			this.allocatedFrames = new boolean[framesNumber];
@@ -933,50 +978,38 @@ public class Sistema {
 			return pageSize;
 		}
 
-		// retorna true se consegue alocar ou falso caso negativo
-		// cada posição i do vetor de saída “tabelaPaginas” informa em que frame a página i deve ser hospedada
-		public int[] alloc(int wordsNumber) {
+		public PageTableEntry[] alloc(int wordsNumber) {
 			int pagesNumber = (int) Math.ceil((double) wordsNumber / this.pageSize);
-			int pagesToAllocate = pagesNumber;
-			int[] frames = new int[pagesNumber];
-			int[] pagesTable = new int[pagesNumber];
-			int lastFrame = 0;
+			PageTableEntry[] pageTable = new PageTableEntry[pagesNumber];
 
+			for (int i = 0; i < pagesNumber; i++) {
+				pageTable[i] = new PageTableEntry();
+			}
+
+			// Aloca só a página 0
 			for (int i = 0; i < framesNumber; i++) {
 				if (!allocatedFrames[i]) {
-					frames[lastFrame] = i;
-					lastFrame++;
-					
-					pagesToAllocate--;
-					if (pagesToAllocate == 0) break;
+					allocatedFrames[i] = true;
+
+					pageTable[0].setValid(true);
+					pageTable[0].setFrame(i);
+					break;
 				}
 			}
 
-			if (pagesToAllocate == 0) {
-				for (int i = 0; i < pagesNumber; i++) {
-					int f = frames[i];
-					allocatedFrames[f] = true;
-					pagesTable[i] = f;
-				}
-			}
-
-			for (int i = 0; i < pagesTable.length; i++) {
-				System.out.println(i + ": " + pagesTable[i]);
-			}
-
-			System.out.println("pagestable: " + Arrays.toString(pagesTable) + " | SIZE: " + pagesTable.length);
-
-			return pagesTable;
+			return pageTable;
 		}
 
-		// simplesmente libera os frames alocados
-		public void free(int[] tabelaPaginas) {
-			for (int i = 0; i < tabelaPaginas.length; i++) {
-				allocatedFrames[tabelaPaginas[i]] = false;
+		public void free(PageTableEntry[] pageTable) {
+			for (PageTableEntry entry : pageTable) {
+				if (entry.isValid()) {
+					int frame = entry.getFrame();
+					allocatedFrames[frame] = false;
+				}
 			}
 		}
 	}
-	
+
 	public class ProcessManager {
 		private MemoryManager mm;
 		private List<PCB> processes;
@@ -997,9 +1030,7 @@ public class Sistema {
 			for (Word w : program) {
 				switch (w.opc) {
 					case STD, LDD, LDX, STX, JMPIM, JMPIGM, JMPILM, JMPIEM:
-						if (w.p > maxLogicalAddr) {
-							maxLogicalAddr = w.p;
-						}
+						if (w.p > maxLogicalAddr) maxLogicalAddr = w.p;
 						break;
 					default:
 						break;
@@ -1007,29 +1038,43 @@ public class Sistema {
 			}
 
 			int wordsNumber = maxLogicalAddr + 1;
-			int[] pagesTable = mm.alloc(wordsNumber);
-			if (pagesTable == null || pagesTable.length == 0) {
-				System.out.println("Gerente de Processos: Memória insuficiente para alocar o processo.");
+			PageTableEntry[] pageTable = mm.alloc(wordsNumber);
+
+			if (pageTable == null || pageTable.length == 0 || !pageTable[0].isValid()) {
+				System.out.println("Gerente de Processos: Falha ao alocar página 0.");
 				return null;
 			}
 
 			int pc = 0;
-			int pageSize = this.mm.getPageSize();
-
-			System.out.println("PC: " + pc + " | PageSize: " + pageSize + " | PagesTable: " + Arrays.toString(pagesTable));
-
-			PCB pcb = new PCB(pc, pagesTable);	
+			int pageSize = mm.getPageSize();
+			PCB pcb = new PCB(pc, pageTable);
 			pcb.setContext(pc, new int[10]);
 
+			System.out.println("PC: " + pc + " | PageSize: " + pageSize + " | PagesTable: " + Arrays.toString(pageTable));
+			
 			int logicalAddr = 0;
 			for (Word w : program) {
-				int page  = logicalAddr / mm.getPageSize();
-				int frame = pagesTable[page];
-				int phys  = frame * mm.getPageSize() + (logicalAddr % mm.getPageSize());
-				hw.mem.pos[phys].opc = w.opc;
-				hw.mem.pos[phys].ra  = w.ra;
-				hw.mem.pos[phys].rb  = w.rb;
-				hw.mem.pos[phys].p   = w.p;
+				int page  = logicalAddr / pageSize;
+				int offset = logicalAddr % pageSize;
+				int physDisk = page * pageSize + offset;
+
+				// Salva código completo no disco
+				hw.disk.pos[physDisk].opc = w.opc;
+				hw.disk.pos[physDisk].ra  = w.ra;
+				hw.disk.pos[physDisk].rb  = w.rb;
+				hw.disk.pos[physDisk].p   = w.p;
+
+				// Se a página estiver na RAM (somente a 0 no início), também copia para a RAM
+				if (pageTable[page].isValid()) {
+					int frame = pageTable[page].getFrame();
+					int physRam = frame * pageSize + offset;
+
+					hw.mem.pos[physRam].opc = w.opc;
+					hw.mem.pos[physRam].ra  = w.ra;
+					hw.mem.pos[physRam].rb  = w.rb;
+					hw.mem.pos[physRam].p   = w.p;
+				}
+
 				logicalAddr++;
 			}
 
@@ -1040,7 +1085,6 @@ public class Sistema {
 
 			return pcb;
 		}
-		
 
 		public void dealloc(int id) {
 			PCB target = null;
@@ -1070,10 +1114,10 @@ public class Sistema {
 		private int id;
 		private int pc;
 		private int[] regState;
-		private int[] pagesTable;
+		private PageTableEntry[] pagesTable;
 		private ProcessStates state;
 
-		public PCB(int pc, int[] pagesTable) {
+		public PCB(int pc, PageTableEntry[] pagesTable) {
 			idCounter++;
 			this.id = idCounter;
 			this.pc = pc;
@@ -1084,7 +1128,7 @@ public class Sistema {
         public int getId() { return this.id; }
         public int getPc() { return this.pc; }
 		public int[] getRegState() { return this.regState; }
-		public int[] getPagesTable() { return pagesTable; }
+		public PageTableEntry[] getPagesTable() { return pagesTable; }
         public void setStates(ProcessStates ps) { this.state = ps; }
 		public ProcessStates getState() { return this.state; }
 
@@ -1101,6 +1145,34 @@ public class Sistema {
 		public String toString() {
 			return "PCB [id=" + id + ", pc=" + pc + ", regState=" + Arrays.toString(regState) + ", pagesTable="
 					+ Arrays.toString(pagesTable) + ", state=" + state + "]";
+		}
+	}
+
+	public class PageTableEntry {
+		private boolean isValid;
+		private int frame;
+
+		public PageTableEntry() {
+			this.isValid = false;
+			this.frame = -1;
+		}
+
+		public boolean isValid() {
+			return isValid;
+		}
+		public void setValid(boolean isValid) {
+			this.isValid = isValid;
+		}
+		public int getFrame() {
+			return frame;
+		}
+		public void setFrame(int frame) {
+			this.frame = frame;
+		}
+
+		@Override
+		public String toString() {
+			return "PageTableEntry [isValid=" + isValid + ", frame=" + frame + "]";
 		}
 	}
 
