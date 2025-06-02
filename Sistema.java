@@ -2,6 +2,13 @@ import java.util.*;
 import java.util.concurrent.Semaphore;
 
 public class Sistema {
+
+	// quando nao ha processos na fila de prontos
+	/*
+	 * declarar processo nop - não faz nada
+	 * se não ha processo pronto, escalona um nop
+	 * 
+	 */
 	private volatile boolean shutdown = false;
 	private final List<Thread> workerThreads = new ArrayList<>();
 
@@ -143,6 +150,7 @@ public class Sistema {
 
 		if (!running.getPagesTable()[page].isValid()) {
 			System.out.println("Pagina " + page + " não válida. PAGE FAULT!!!!");
+			// TODO: verificar porque tantas interrupcoes de pageFault estão sendo geradas
 			irpt.add(Interrupts.pageFault);
 			return -1;
 		}
@@ -200,6 +208,7 @@ public class Sistema {
 			if (e >= 0 && e < m.length) {
 				return true;
 			} else {
+				// TODO: verificar porque tantas irpt de intEnderecoInvalido estão sendo geradas
 				irpt.add(Interrupts.intEnderecoInvalido);    // se nao for liga interrupcao no meio da exec da instrucao
 				return false;
 			}
@@ -236,7 +245,7 @@ public class Sistema {
 					int physPC = mmu(pc); // mmu faz a traducao de endereco logico para fisico, se necessario
 					System.out.println("\nExec j=" + j + " pc(log)=" + pc + " pc(phy)=" + physPC + " irpt=" + irpt);
 
-					if (physPC != -1 && legal(physPC)) { // pc valido
+					if (legal(physPC)) { // pc valido
 						ir = m[physPC];  // <<<<<<<<<<<< AQUI faz FETCH - busca posicao da memoria apontada por pc, guarda em ir
 									// resto é dump de debug
 						if (debug) {
@@ -1095,12 +1104,12 @@ public class Sistema {
 				int offset = logicalAddr % pageSize;
 				int physDisk = page * pageSize + offset;
 
-				// Salva código completo no disco
 				hw.disk.pos[physDisk].opc = w.opc;
 				hw.disk.pos[physDisk].ra  = w.ra;
 				hw.disk.pos[physDisk].rb  = w.rb;
 				hw.disk.pos[physDisk].p   = w.p;
 
+				// TODO: DEVE estar fora do loop, pq é apenas a primeira página que é alocada na RAM
 				// Se a página estiver na RAM (somente a 0 no início), também copia para a RAM
 				if (pageTable[page].isValid()) {
 					int frame = pageTable[page].getFrame();
