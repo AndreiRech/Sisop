@@ -144,6 +144,7 @@ public class Sistema {
 		if (!running.getPagesTable()[page].isValid()) {
 			System.out.println("Pagina " + page + " não válida. PAGE FAULT!!!!");
 			irpt.add(Interrupts.pageFault);
+			return -1;
 		}
 
 		int block = running.getPagesTable()[page].getFrame();
@@ -235,7 +236,7 @@ public class Sistema {
 					int physPC = mmu(pc); // mmu faz a traducao de endereco logico para fisico, se necessario
 					System.out.println("\nExec j=" + j + " pc(log)=" + pc + " pc(phy)=" + physPC + " irpt=" + irpt);
 
-					if (legal(physPC)) { // pc valido
+					if (physPC != -1 && legal(physPC)) { // pc valido
 						ir = m[physPC];  // <<<<<<<<<<<< AQUI faz FETCH - busca posicao da memoria apontada por pc, guarda em ir
 									// resto é dump de debug
 						if (debug) {
@@ -548,7 +549,7 @@ public class Sistema {
 					running.setContext(hw.cpu.pc, hw.cpu.reg);
 				
 					// Aqui deve-se carregar a pagina na memoria, se nao tiver espaço deve-se desalocar uma pagina
-
+					pm.allocPageFault(running.id);
 
 					semaphoreScheduler.release();
 
@@ -966,6 +967,7 @@ public class Sistema {
 		private int pageSize;
 		private int framesNumber;
 		private boolean[] allocatedFrames;
+		private Queue<Integer> frameQueue = new LinkedList<>();
 
 		public MemoryManager(int memorySize, int pageSize) {
 			this.pageSize = pageSize;
@@ -1007,6 +1009,41 @@ public class Sistema {
 					allocatedFrames[frame] = false;
 				}
 			}
+		}
+
+		public int requestFrame(PCB requestingProcess, int pageIndex, List<PCB> processes) {
+			for (int i = 0; i < framesNumber; i++) {
+				if (!allocatedFrames[i]) {
+					allocatedFrames[i] = true;
+					frameQueue.add(i);
+					return i;
+				}
+			}
+
+			int victimFrame = frameQueue.poll(); 
+			allocatedFrames[victimFrame] = true;
+
+			for (PCB pcb : processes) {
+				for (PageTableEntry entry : pcb.getPagesTable()) {
+					if (entry.isValid() && entry.getFrame() == victimFrame) {
+						
+						int page = Arrays.asList(pcb.getPagesTable()).indexOf(entry);
+						int baseRam = victimFrame * pageSize;
+						int baseDisk = page * pageSize;
+
+						for (int i = 0; i < pageSize; i++) {
+							hw.disk.pos[baseDisk + i] = hw.mem.pos[baseRam + i];
+						}
+
+						entry.setValid(false);
+						entry.setFrame(-1);
+						break;
+					}
+				}
+			}
+
+			frameQueue.add(victimFrame);
+			return victimFrame;
 		}
 	}
 
@@ -1106,6 +1143,46 @@ public class Sistema {
 			processes.remove(target);
 			ready.remove(target);
 			target.setStates(ProcessStates.finished);
+		}
+
+		public void allocPageFault(int id) {
+			PCB target = null;
+
+			for (PCB pcb : processes) {
+				if (pcb.getId() == id) {
+					target = pcb;
+					System.out.println("Achamos!");
+					break;
+				}
+			}
+
+			if (target == null) {
+				System.out.println("Gerente de Processos: Processo não encontrado.");
+				return;
+			}
+
+			int pageSize = mm.getPageSize();
+			int pc = target.getPc();
+			int pageIndex = pc / pageSize;
+
+			System.out.println("PAGE FAULT no processo " + id + ", página " + pageIndex);
+
+			int frame = mm.requestFrame(target, pageIndex, processes);
+			target.getPagesTable()[pageIndex].setValid(true);
+			target.getPagesTable()[pageIndex].setFrame(frame);
+
+			// Copiar do disco para a RAM (swap in)
+			int baseDisk = pageIndex * pageSize;
+			int baseRam = frame * pageSize;
+
+			for (int i = 0; i < pageSize; i++) {
+				hw.mem.pos[baseRam + i] = hw.disk.pos[baseDisk + i];
+			}
+
+			// Bloqueia o processo
+			target.setStates(ProcessStates.ready);
+
+			System.out.println("Página " + pageIndex + " carregada para o frame " + frame);
 		}
 	}
 
