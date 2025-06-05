@@ -2,8 +2,6 @@ import java.util.*;
 import java.util.concurrent.Semaphore;
 
 public class Sistema {
-
-	// quando nao ha processos na fila de prontos
 	/*
 	 * declarar processo nop - não faz nada
 	 * se não ha processo pronto, escalona um nop
@@ -13,10 +11,12 @@ public class Sistema {
 	private final List<Thread> workerThreads = new ArrayList<>();
 
 	private static boolean ioRequest = false;
+	private static VmRequisition vmRequisition = null;
 
 	Semaphore semaphoreCPU = new Semaphore(0); 
 	Semaphore semaphoreScheduler = new Semaphore(0);
 	Semaphore semaphoreConsole = new Semaphore(0);
+	Semaphore semaphoreVm = new Semaphore(0);
 
 	Queue<Interrupts> irpt = new LinkedList<>();
 	Queue<SysCalls> sysc = new LinkedList<>();
@@ -75,6 +75,23 @@ public class Sistema {
 		}
 	}
 
+	public class VmIoRunnable implements Runnable {
+		private VmIo vmIo;
+
+		public VmIoRunnable(VmIo vmIo) {
+			this.vmIo = vmIo;
+		}
+
+		public void run() {
+			System.out.println("Thread VmIo em execução.");
+			try {
+				vmIo.run();
+			} catch (InterruptedException e) {
+				// e.printStackTrace();
+			}
+		}
+	}
+
 	// -------------------------------------------------------------------------------------------------------
 	// --------------------- H A R D W A R E - definicoes de HW
 	// ----------------------------------------------
@@ -90,7 +107,7 @@ public class Sistema {
 			pos = new Word[size];
 			for (int i = 0; i < pos.length; i++) {
 				pos[i] = new Word(Opcode.___, -1, -1, -1);
-			} // cada posicao da memoria inicializada
+			}
 		}
 	}
 
@@ -150,13 +167,36 @@ public class Sistema {
 
 		if (!running.getPagesTable()[page].isValid()) {
 			System.out.println("Pagina " + page + " não válida. PAGE FAULT!!!!");
-			// TODO: verificar porque tantas interrupcoes de pageFault estão sendo geradas
 			irpt.add(Interrupts.pageFault);
 			return -1;
 		}
 
 		int block = running.getPagesTable()[page].getFrame();
 		return 4 * block + (pc % 4);
+	}
+
+	public class VmRequisition {
+		private int id; // id do processo que requisitou a pagina
+		private int page; // pagina requisitada
+		private int frame; // frame onde a pagina deve ser carregada
+
+		public VmRequisition(int _id, int _page, int _frame) {
+			id = _id;
+			page = _page;
+			frame = _frame;
+		}
+
+		public int getId() {
+			return id;
+		}
+
+		public int getPage() {
+			return page;
+		}
+
+		public int getFrame() {
+			return frame;
+		}
 	}
 
 	public class CPU {
@@ -208,7 +248,6 @@ public class Sistema {
 			if (e >= 0 && e < m.length) {
 				return true;
 			} else {
-				// TODO: verificar porque tantas irpt de intEnderecoInvalido estão sendo geradas
 				irpt.add(Interrupts.intEnderecoInvalido);    // se nao for liga interrupcao no meio da exec da instrucao
 				return false;
 			}
@@ -245,25 +284,26 @@ public class Sistema {
 					int physPC = mmu(pc); // mmu faz a traducao de endereco logico para fisico, se necessario
 					System.out.println("\nExec j=" + j + " pc(log)=" + pc + " pc(phy)=" + physPC + " irpt=" + irpt);
 
-					if (legal(physPC)) { // pc valido
-						ir = m[physPC];  // <<<<<<<<<<<< AQUI faz FETCH - busca posicao da memoria apontada por pc, guarda em ir
-									// resto é dump de debug
-						if (debug) {
-							System.out.print("                                              regs: ");
-							for (int i = 0; i < 10; i++) {
-								System.out.print(" r[" + i + "]:" + reg[i]);
+					if (physPC != -1) {
+						if (legal(physPC)) { // pc valido
+							ir = m[physPC];  // <<<<<<<<<<<< AQUI faz FETCH - busca posicao da memoria apontada por pc, guarda em ir
+										// resto é dump de debug
+							if (debug) {
+								System.out.print("                                              regs: ");
+								for (int i = 0; i < 10; i++) {
+									System.out.print(" r[" + i + "]:" + reg[i]);
+								}
+								;
+								System.out.println();
 							}
-							;
-							System.out.println();
-						}
-						if (debug) {
-							System.out.print("                      pc: " + pc + "       exec: ");
-							u.dump(ir);
-						}
+							if (debug) {
+								System.out.print("                      pc: " + pc + "       exec: ");
+								u.dump(ir);
+							}
 
-					// --------------------------------------------------------------------------------------------------
-					// FASE DE EXECUCAO DA INSTRUCAO CARREGADA NO ir
-						switch (ir.opc) {       // conforme o opcode (código de operação) executa
+						// --------------------------------------------------------------------------------------------------
+						// FASE DE EXECUCAO DA INSTRUCAO CARREGADA NO ir
+							switch (ir.opc) {       // conforme o opcode (código de operação) executa
 
 							// Instrucoes de Busca e Armazenamento em Memoria
 							case LDI: // Rd ← k        veja a tabela de instrucoes do HW simulado para entender a semantica da instrucao
@@ -439,8 +479,9 @@ public class Sistema {
 								irpt.add(Interrupts.intInstrucaoInvalida);
 								break;
 						}
+						}
 					}
-
+					
 					if (processEnd) sysc.add(SysCalls.processEnd);
 					else if (j == Q - 1) irpt.add(Interrupts.roundRobin);
 
@@ -535,7 +576,7 @@ public class Sistema {
 				case ioFinished:
 					System.out.println("IO Finished");
 
-					PCB p = blocked.poll();
+					PCB p = blockedIO.poll();
 					ready.add(p);
 					p.setStates(ProcessStates.ready);
 
@@ -552,15 +593,26 @@ public class Sistema {
 					System.out.println("Page Fault - A pagina nao esta carregada na memoria");
 
 					ready.remove(running);
-					blocked.add(running);
+					blockedVM.add(running);
 					
 					running.setStates(ProcessStates.blocked);
 					running.setContext(hw.cpu.pc, hw.cpu.reg);
 				
-					// Aqui deve-se carregar a pagina na memoria, se nao tiver espaço deve-se desalocar uma pagina
-					pm.allocPageFault(running.id);
+					// Aqui deve-se liberar o semáforo da VM para que ela possa carregar a página
+					// TODO: Precisa passar -> ID, pagina, frame
+					// fiz uma estrutura de requisicao para a VM (VmRequisition) para facilitar o tratamento e passar os dados
+
+					semaphoreVm.release();
 
 					semaphoreScheduler.release();
+
+					break;
+				case pageSaved, pageLoaded:
+					System.out.println("Fazer algo com a pagina salva ou carregada");
+
+					PCB process = blockedVM.poll();
+					ready.add(process);
+					process.setStates(ProcessStates.ready);
 
 					break;
 				default:
@@ -590,7 +642,7 @@ public class Sistema {
 				case ioRequest:
 					System.out.println("IoRequest");
 					ready.remove(running);
-					blocked.add(running);
+					blockedIO.add(running);
 					
 					running.setStates(ProcessStates.blocked);
 					running.setContext(hw.cpu.pc, hw.cpu.reg);
@@ -673,6 +725,7 @@ public class Sistema {
 		public PCB running;
 		public Scheduler scheduler;
 		public Console console;
+		public VmIo vmIo;
 
 		public SO(HW hw, int tamMem, int tamPag) {
 			utils = new Utilities(hw);
@@ -680,6 +733,7 @@ public class Sistema {
 			pm = new ProcessManager(mm);
 			scheduler = new Scheduler();
 			console = new Console();
+			vmIo = new VmIo();
 			ih = new InterruptHandling(hw, pm);
 			sc = new SysCallHandling(hw,pm);
 			hw.cpu.setAddressOfHandlers(ih, sc);
@@ -690,10 +744,15 @@ public class Sistema {
 			ConsoleRunnable consoleRunnable = new ConsoleRunnable(console);
 			Thread consoleThread = new Thread(consoleRunnable);
 
+			VmIoRunnable vmIoRunnable = new VmIoRunnable(vmIo);
+			Thread vmIoThread = new Thread(vmIoRunnable);
+
 			workerThreads.add(schedulerThread);
 			workerThreads.add(consoleThread);
+			workerThreads.add(vmIoThread);
 			schedulerThread.start();
 			consoleThread.start();
+			vmIoThread.start();
 		}
 
 		// cria um processo na memória
@@ -788,7 +847,8 @@ public class Sistema {
 	public SO so;
 	public Programs progs;
 	public static Queue<PCB> ready;
-	public static Queue<PCB> blocked;
+	public static Queue<PCB> blockedIO;
+	public static Queue<PCB> blockedVM;
 	public PCB running;
 	public boolean autoMode = true;
 
@@ -796,7 +856,8 @@ public class Sistema {
 		hw = new HW(tamMem);           // memoria do HW tem tamMem palavras
 		so = new SO(hw, tamMem, tamPag);
 		ready = new LinkedList<>();
-		blocked = new LinkedList<>();
+		blockedIO = new LinkedList<>();
+		blockedVM = new LinkedList<>();
 
 		hw.cpu.setUtilities(so.utils); // permite cpu fazer dump de memoria ao avancar
 		progs = new Programs();
@@ -1298,26 +1359,39 @@ public class Sistema {
 				semaphoreConsole.acquire();
 				System.out.println("------------------------------------- [ CONSOLE ] -------------------------------------");
 				
-				// TODO -> Isso aqui deveria ser feito pelo DMA
 				if (ioRequest) {
 					System.out.println("Console: IO leitura");
 
 					System.out.println("IN:   ");
 					int input = in.nextInt();
 
-					PCB p = blocked.peek();
+					PCB p = blockedIO.peek();
 					p.setRegState(9, input);
 
 					in.close();
 				} else {
 					System.out.println("Console: IO escrita");
 
-					PCB p = blocked.peek();
+					PCB p = blockedIO.peek();
 
 					System.out.println("OUT:   "+ p.getRegState()[9]);
 				}
 
 				irpt.add(Interrupts.ioFinished);
+			}
+		}
+	}
+
+	public class VmIo {
+		public void run() throws InterruptedException {
+			while (!shutdown) {
+				semaphoreVm.acquire();
+				System.out.println("------------------------------------- [ VMIO ] -------------------------------------");
+				
+				// Serve entrada de pagina -> frame
+
+				// Interrompe cpu
+				irpt.add(Interrupts.pageSaved);
 			}
 		}
 	}
