@@ -11,7 +11,7 @@ public class Sistema {
 	private final List<Thread> workerThreads = new ArrayList<>();
 
 	private static boolean ioRequest = false;
-	private static VmRequisition vmRequisition = null;
+	private VmRequisition vmRequisition = new VmRequisition();
 
 	Semaphore semaphoreCPU = new Semaphore(0); 
 	Semaphore semaphoreScheduler = new Semaphore(0);
@@ -165,8 +165,11 @@ public class Sistema {
 	public int mmu(int pc) {
 		int page = pc / 4;
 
+		if (running == null) { return -1; }
+
 		if (!running.getPagesTable()[page].isValid()) {
 			System.out.println("Pagina " + page + " não válida. PAGE FAULT!!!!");
+			vmRequisition.setPage(page);
 			irpt.add(Interrupts.pageFault);
 			return -1;
 		}
@@ -179,6 +182,8 @@ public class Sistema {
 		private int id; // id do processo que requisitou a pagina
 		private int page; // pagina requisitada
 		private int frame; // frame onde a pagina deve ser carregada
+
+		public VmRequisition() {}
 
 		public VmRequisition(int _id, int _page, int _frame) {
 			id = _id;
@@ -196,6 +201,18 @@ public class Sistema {
 
 		public int getFrame() {
 			return frame;
+		}
+
+		public void setId(int id) {
+			this.id = id;
+		}
+
+		public void setPage(int page) {
+			this.page = page;
+		}
+
+		public void setFrame(int frame) {
+			this.frame = frame;
 		}
 	}
 
@@ -248,7 +265,7 @@ public class Sistema {
 			if (e >= 0 && e < m.length) {
 				return true;
 			} else {
-				irpt.add(Interrupts.intEnderecoInvalido);    // se nao for liga interrupcao no meio da exec da instrucao
+				// irpt.add(Interrupts.intEnderecoInvalido);    // se nao for liga interrupcao no meio da exec da instrucao
 				return false;
 			}
 		}
@@ -274,6 +291,7 @@ public class Sistema {
 				semaphoreCPU.acquire();
 				boolean processEnd = false;
 				
+				if (running == null) { continue; }
 				System.out.println("\n Rodando processo: " + running.getId());
 
 				// RoundRobin
@@ -282,7 +300,7 @@ public class Sistema {
 					// --------------------------------------------------------------------------------------------------
 					// FASE DE FETCH
 					int physPC = mmu(pc); // mmu faz a traducao de endereco logico para fisico, se necessario
-					System.out.println("\nExec j=" + j + " pc(log)=" + pc + " pc(phy)=" + physPC + " irpt=" + irpt);
+					//System.out.println("\nExec j=" + j + " pc(log)=" + pc + " pc(phy)=" + physPC + " irpt=" + irpt);
 
 					if (physPC != -1) {
 						if (legal(physPC)) { // pc valido
@@ -582,12 +600,12 @@ public class Sistema {
 
 					break;
 				case intEnderecoInvalido:
-					// System.out.println("Endereco invalido - A execucao do processo " + running.getId() + " sera pausada e o processo cancelado.");
+					System.out.println("Endereco invalido - A execucao do processo " + running.getId() + " sera pausada e o processo cancelado.");
 
-					// pm.dealloc(running.getId());
-					// running.setStates(ProcessStates.finished);
+					pm.dealloc(running.getId());
+					running.setStates(ProcessStates.finished);
 
-					// semaphoreScheduler.release();
+					semaphoreScheduler.release();
 					break;
 				case pageFault:
 					System.out.println("Page Fault - A pagina nao esta carregada na memoria");
@@ -599,8 +617,8 @@ public class Sistema {
 					running.setContext(hw.cpu.pc, hw.cpu.reg);
 				
 					// Aqui deve-se liberar o semáforo da VM para que ela possa carregar a página
-					// TODO: Precisa passar -> ID, pagina, frame
-					// fiz uma estrutura de requisicao para a VM (VmRequisition) para facilitar o tratamento e passar os dados
+					System.out.println("Running: "+ running.getId());
+					vmRequisition.setId(running.getId());
 
 					semaphoreVm.release();
 
@@ -733,7 +751,7 @@ public class Sistema {
 			pm = new ProcessManager(mm);
 			scheduler = new Scheduler();
 			console = new Console();
-			vmIo = new VmIo();
+			vmIo = new VmIo(pm);
 			ih = new InterruptHandling(hw, pm);
 			sc = new SysCallHandling(hw,pm);
 			hw.cpu.setAddressOfHandlers(ih, sc);
@@ -1215,7 +1233,7 @@ public class Sistema {
 			target.setStates(ProcessStates.finished);
 		}
 
-		public void allocPageFault(int id) {
+		public int allocPageFault(int id, int page) {
 			PCB target = null;
 
 			for (PCB pcb : processes) {
@@ -1228,12 +1246,11 @@ public class Sistema {
 
 			if (target == null) {
 				System.out.println("Gerente de Processos: Processo não encontrado.");
-				return;
+				return -1;
 			}
 
 			int pageSize = mm.getPageSize();
-			int pc = target.getPc();
-			int pageIndex = pc / pageSize;
+			int pageIndex = page;
 
 			System.out.println("PAGE FAULT no processo " + id + ", página " + pageIndex);
 
@@ -1253,6 +1270,8 @@ public class Sistema {
 			target.setStates(ProcessStates.ready);
 
 			System.out.println("Página " + pageIndex + " carregada para o frame " + frame);
+
+			return frame;
 		}
 	}
 
@@ -1383,12 +1402,20 @@ public class Sistema {
 	}
 
 	public class VmIo {
+		private ProcessManager pm;
+
+		public VmIo(ProcessManager pm) {
+			this.pm = pm;
+		}
+
 		public void run() throws InterruptedException {
 			while (!shutdown) {
 				semaphoreVm.acquire();
 				System.out.println("------------------------------------- [ VMIO ] -------------------------------------");
 				
 				// Serve entrada de pagina -> frame
+				int frame = this.pm.allocPageFault(vmRequisition.getId(), vmRequisition.getPage());
+				System.out.println("Frame -> " + frame);
 
 				// Interrompe cpu
 				irpt.add(Interrupts.pageSaved);
