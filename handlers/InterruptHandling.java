@@ -47,13 +47,12 @@ import utils.PCB;
 
 					break;
 				case intEnderecoInvalido:
-					// System.out.println("Endereco invalido - A execucao do processo " +
-					// running.getId() + " sera pausada e o processo cancelado.");
+					System.out.println("Endereco invalido - A execucao do processo " + GlobalVariables.running.getId() + " sera pausada e o processo cancelado.");
 
-					// pm.dealloc(running.getId());
-					// running.setStates(ProcessStates.finished);
+					pm.dealloc(GlobalVariables.running.getId());
+					GlobalVariables.running.setStates(ProcessStates.finished);
 
-					// semaphoreScheduler.release();
+					GlobalVariables.semaphoreScheduler.release();
 					break;
 				case pageFault:
 					System.out.println("Page Fault - A pagina nao esta carregada na memoria");
@@ -64,10 +63,8 @@ import utils.PCB;
 					GlobalVariables.running.setStates(ProcessStates.blocked);
 					GlobalVariables.running.setContext(hw.cpu.pc, hw.cpu.reg);
 
-					// Aqui deve-se liberar o semáforo da VM para que ela possa carregar a página
-					// TODO: Precisa passar -> ID, pagina, frame
-					// fiz uma estrutura de requisicao para a VM (VmRequisition) para facilitar o
-					// tratamento e passar os dados
+					System.out.println("Running: "+ GlobalVariables.running.getId());
+					GlobalVariables.vmRequest.setId(GlobalVariables.running.getId());
 
 					GlobalVariables.semaphoreVm.release();
 

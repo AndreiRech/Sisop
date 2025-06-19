@@ -31,7 +31,7 @@ public class OS {
 		pm = new ProcessManager(hw, mm);
 		scheduler = new Scheduler(hw);
 		console = new Console();
-		vmIo = new VmIo();
+		vmIo = new VmIo(pm);
 		ih = new InterruptHandling(hw, pm);
 		sc = new SysCallHandling(hw, pm);
 		hw.cpu.setAddressOfHandlers(ih, sc);

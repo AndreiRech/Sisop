@@ -115,7 +115,7 @@ public class ProcessManager {
 			target.setStates(ProcessStates.finished);
 		}
 
-		public void allocPageFault(int id) {
+		public int allocPageFault(int id, int page) {
 			PCB target = null;
 
 			for (PCB pcb : processes) {
@@ -128,12 +128,11 @@ public class ProcessManager {
 
 			if (target == null) {
 				System.out.println("Gerente de Processos: Processo não encontrado.");
-				return;
+				return -1;
 			}
 
 			int pageSize = mm.getPageSize();
-			int pc = target.getPc();
-			int pageIndex = pc / pageSize;
+			int pageIndex = page;
 
 			System.out.println("PAGE FAULT no processo " + id + ", página " + pageIndex);
 
@@ -153,6 +152,8 @@ public class ProcessManager {
 			target.setStates(ProcessStates.ready);
 
 			System.out.println("Página " + pageIndex + " carregada para o frame " + frame);
+
+			return frame;
 		}
 	}
     

@@ -57,7 +57,7 @@ public class CPU {
         if (e >= 0 && e < m.length) {
             return true;
         } else {
-            GlobalVariables.irpt.add(Interrupts.intEnderecoInvalido); // se nao for liga interrupcao no meio da exec da
+            //GlobalVariables.irpt.add(Interrupts.intEnderecoInvalido); // se nao for liga interrupcao no meio da exec da
                                                                       // instrucao
             return false;
         }
@@ -79,10 +79,14 @@ public class CPU {
 
     public int mmu(int pc) {
         int page = pc / 4;
+        System.out.println("Page: " + page + " - Frame: " + GlobalVariables.running.getPagesTable().length);
+
+        if (GlobalVariables.running == null) { return -1; }
 
         if (!GlobalVariables.running.getPagesTable()[page].isValid()) {
             System.out.println("Pagina " + page + " não válida. PAGE FAULT!!!!");
             GlobalVariables.irpt.add(Interrupts.pageFault);
+            GlobalVariables.vmRequest.setPage(page);
             return -1;
         }
 
@@ -106,8 +110,8 @@ public class CPU {
                 // --------------------------------------------------------------------------------------------------
                 // FASE DE FETCH
                 int physPC = mmu(pc); // mmu faz a traducao de endereco logico para fisico, se necessario
-                System.out.println(
-                        "\nExec j=" + j + " pc(log)=" + pc + " pc(phy)=" + physPC + " irpt=" + GlobalVariables.irpt);
+                // System.out.println(
+                //         "\nExec j=" + j + " pc(log)=" + pc + " pc(phy)=" + physPC + " irpt=" + GlobalVariables.irpt);
 
                 if (physPC != -1) {
                     if (legal(physPC)) { // pc valido

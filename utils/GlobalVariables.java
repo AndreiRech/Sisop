@@ -15,7 +15,7 @@ public class GlobalVariables {
     public static volatile boolean shutdown = false;
 	public static final List<Thread> workerThreads = new ArrayList<>();
 
-	public static VmRequest vmRequest = null;
+	public static VmRequest vmRequest = new VmRequest();
 	public static boolean ioRequest = false;
 
 	public static Semaphore semaphoreScheduler = new Semaphore(0);
