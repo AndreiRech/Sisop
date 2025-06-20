@@ -68,8 +68,6 @@ public class ProcessManager {
 				hw.disk.pos[physDisk].rb = w.rb;
 				hw.disk.pos[physDisk].p = w.p;
 
-				// TODO: DEVE estar fora do loop, pq é apenas a primeira página que é alocada na
-				// RAM
 				// Se a página estiver na RAM (somente a 0 no início), também copia para a RAM
 				if (pageTable[page].isValid()) {
 					int frame = pageTable[page].getFrame();
@@ -115,7 +113,7 @@ public class ProcessManager {
 			target.setStates(ProcessStates.finished);
 		}
 
-		public int allocPageFault(int id, int page) {
+		public int allocPageFault(int id, int pageIndex) {
 			PCB target = null;
 
 			for (PCB pcb : processes) {
@@ -132,7 +130,6 @@ public class ProcessManager {
 			}
 
 			int pageSize = mm.getPageSize();
-			int pageIndex = page;
 
 			System.out.println("PAGE FAULT no processo " + id + ", página " + pageIndex);
 

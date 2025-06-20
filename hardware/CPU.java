@@ -79,9 +79,8 @@ public class CPU {
 
     public int mmu(int pc) {
         int page = pc / 4;
-        System.out.println("Page: " + page + " - Frame: " + GlobalVariables.running.getPagesTable().length);
 
-        if (GlobalVariables.running == null) { return -1; }
+        if (GlobalVariables.running.getId() == -1) { return -1; }
 
         if (!GlobalVariables.running.getPagesTable()[page].isValid()) {
             System.out.println("Pagina " + page + " não válida. PAGE FAULT!!!!");
@@ -104,9 +103,12 @@ public class CPU {
 
             System.out.println("\n Rodando processo: " + GlobalVariables.running.getId());
 
+            Thread.sleep(1000);
             // RoundRobin
             for (int j = 0; j < Q; j++) {
+                Thread.sleep(1000);
 
+                if (GlobalVariables.running.getId() == -1 ) { continue; }
                 // --------------------------------------------------------------------------------------------------
                 // FASE DE FETCH
                 int physPC = mmu(pc); // mmu faz a traducao de endereco logico para fisico, se necessario
@@ -326,6 +328,9 @@ public class CPU {
                     for (Interrupts i : GlobalVariables.irpt) {
                         ih.handle(i); // desvia para rotina de tratamento - esta rotina é do SO
                         GlobalVariables.irpt.poll();
+
+                        if (i == Interrupts.pageFault) j = Q;
+
                         break;
                     }
                 }

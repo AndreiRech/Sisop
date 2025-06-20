@@ -40,6 +40,7 @@ public class MemoryManager {
 			for (int i = 0; i < framesNumber; i++) {
 				if (!allocatedFrames[i]) {
 					allocatedFrames[i] = true;
+					frameQueue.add(i);
 
 					pageTable[0].setValid(true);
 					pageTable[0].setFrame(i);
@@ -68,6 +69,7 @@ public class MemoryManager {
 				}
 			}
 
+			System.out.println("MemoryManager: No free frames available, applying page replacement policy.");
 			int victimFrame = frameQueue.poll();
 			allocatedFrames[victimFrame] = true;
 

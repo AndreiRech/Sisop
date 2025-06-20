@@ -63,17 +63,13 @@ import utils.PCB;
 					GlobalVariables.running.setStates(ProcessStates.blocked);
 					GlobalVariables.running.setContext(hw.cpu.pc, hw.cpu.reg);
 
-					System.out.println("Running: "+ GlobalVariables.running.getId());
 					GlobalVariables.vmRequest.setId(GlobalVariables.running.getId());
 
-					GlobalVariables.semaphoreVm.release();
-
 					GlobalVariables.semaphoreScheduler.release();
-
+					
+					GlobalVariables.semaphoreVm.release();
 					break;
 				case pageSaved, pageLoaded:
-					System.out.println("Fazer algo com a pagina salva ou carregada");
-
 					PCB process = GlobalVariables.blockedVM.poll();
 					GlobalVariables.ready.add(process);
 					process.setStates(ProcessStates.ready);

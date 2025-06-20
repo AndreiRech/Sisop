@@ -2,6 +2,7 @@ package handlers;
 
 import hardware.HW;
 import utils.GlobalVariables;
+import utils.PCB;
 import enums.ProcessStates;
 import enums.SysCalls;
 import os.ProcessManager;
@@ -49,11 +50,9 @@ public class SysCallHandling {
             case processEnd:
                 System.out.println("ProcessEnd");
 
-                if (GlobalVariables.running == null)
-                    return;
-
                 pm.dealloc(GlobalVariables.running.getId());
                 GlobalVariables.running.setStates(ProcessStates.finished);
+                GlobalVariables.ready.remove(GlobalVariables.running);
 
                 GlobalVariables.semaphoreScheduler.release();
                 break;

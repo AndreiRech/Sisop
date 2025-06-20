@@ -12,6 +12,13 @@ public class PCB {
     private PageTableEntry[] pagesTable;
     private ProcessStates state;
 
+    public PCB(int id) {
+        this.id = id;
+        this.pc = 0;
+        this.pagesTable = null;
+        this.regState = new int[10];
+    }
+
     public PCB(int pc, PageTableEntry[] pagesTable) {
         idCounter++;
         this.id = idCounter;

@@ -17,12 +17,10 @@ public class VmIo {
             System.out.println("------------------------------------- [ VMIO ] -------------------------------------");
 
             // Serve entrada de pagina -> frame
-            int frame = this.pm.allocPageFault(GlobalVariables.vmRequest.getProcessId(), GlobalVariables.vmRequest.getRequestedPage());
-			System.out.println("Frame -> " + frame);
+            this.pm.allocPageFault(GlobalVariables.vmRequest.getProcessId(), GlobalVariables.vmRequest.getRequestedPage());
 
             // Interrompe cpu
             GlobalVariables.irpt.add(Interrupts.pageSaved);
-            System.out.println("TESTE");
         }
     }
 }
