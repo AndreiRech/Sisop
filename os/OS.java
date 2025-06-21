@@ -30,7 +30,7 @@ public class OS {
 		mm = new MemoryManager(hw, tamMem, tamPag);
 		pm = new ProcessManager(hw, mm);
 		scheduler = new Scheduler(hw);
-		console = new Console();
+		console = new Console(hw, pm);
 		vmIo = new VmIo(pm);
 		ih = new InterruptHandling(hw, pm);
 		sc = new SysCallHandling(hw, pm);
@@ -54,10 +54,12 @@ public class OS {
 	}
 
 	// cria um processo na memória
-	public boolean newProcess(Word[] program) {
-		GlobalVariables.running = pm.createProcess(program);
+	public void newProcess(Word[] program) {
+		pm.createProcess(program);
 
-		return GlobalVariables.running == null;
+		if (GlobalVariables.autoMode)
+			GlobalVariables.semaphoreScheduler.release();
+
 	}
 
 	// lista todos processos existentes

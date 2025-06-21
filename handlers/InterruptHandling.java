@@ -34,6 +34,8 @@ import utils.PCB;
 					// Se o processo tem uma instrucao invalida ele e desalocado da memoria e
 					// retirado da fila de processos
 					pm.dealloc(GlobalVariables.running.getId());
+					
+					GlobalVariables.ready.remove(GlobalVariables.running);
 					GlobalVariables.running.setStates(ProcessStates.finished);
 
 					GlobalVariables.semaphoreScheduler.release();
@@ -55,8 +57,6 @@ import utils.PCB;
 					GlobalVariables.semaphoreScheduler.release();
 					break;
 				case pageFault:
-					System.out.println("Page Fault - A pagina nao esta carregada na memoria");
-
 					GlobalVariables.ready.remove(GlobalVariables.running);
 					GlobalVariables.blockedVM.add(GlobalVariables.running);
 

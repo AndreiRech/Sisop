@@ -54,6 +54,7 @@ public class Sistema {
 					System.out.println("3 - progMinimo");
 					System.out.println("4 - fibonacci10");
 					System.out.println("5 - fibonacci10v2");
+					System.out.println("8 - fibonacciREAD");
 					System.out.println("6 - PB");
 					System.out.println("7 - PC");
 					System.out.println("0 - Voltar");
@@ -87,6 +88,10 @@ public class Sistema {
 
 						case 7:
 							os.newProcess(progs.retrieveProgram("PC"));
+							break;
+
+						case 8:
+							os.newProcess(progs.retrieveProgram("fibonacciREAD"));
 							break;
 
 						case 0:

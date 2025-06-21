@@ -4,6 +4,7 @@ import handlers.InterruptHandling;
 import handlers.SysCallHandling;
 import utils.GlobalVariables;
 import utils.Opcode;
+import utils.PCB;
 import utils.Utilities;
 import utils.Word;
 import enums.Interrupts;
@@ -39,7 +40,7 @@ public class CPU {
         reg = new int[10]; // aloca o espaço dos registradores - regs 8 e 9 usados somente para IO
 
         this.debug = debug; // se true, print da instrucao em execucao
-
+        GlobalVariables.running = GlobalVariables.nop; // inicializa o contexto do processo rodando
     }
 
     public void setAddressOfHandlers(InterruptHandling _ih, SysCallHandling _sysCall) {
@@ -79,6 +80,7 @@ public class CPU {
 
     public int mmu(int pc) {
         int page = pc / 4;
+        System.out.println("\nMMU: pc=" + pc + " page=" + page);
 
         if (GlobalVariables.running.getId() == -1) { return -1; }
 
@@ -104,16 +106,12 @@ public class CPU {
             System.out.println("\n Rodando processo: " + GlobalVariables.running.getId());
 
             Thread.sleep(1000);
-            // RoundRobin
             for (int j = 0; j < Q; j++) {
-                Thread.sleep(1000);
-
+                Thread.sleep(500);
                 if (GlobalVariables.running.getId() == -1 ) { continue; }
                 // --------------------------------------------------------------------------------------------------
                 // FASE DE FETCH
                 int physPC = mmu(pc); // mmu faz a traducao de endereco logico para fisico, se necessario
-                // System.out.println(
-                //         "\nExec j=" + j + " pc(log)=" + pc + " pc(phy)=" + physPC + " irpt=" + GlobalVariables.irpt);
 
                 if (physPC != -1) {
                     if (legal(physPC)) { // pc valido

@@ -22,11 +22,12 @@ public class Scheduler {
                 GlobalVariables.running.setStates(ProcessStates.ready);
 
                 GlobalVariables.ready.add(GlobalVariables.running);
+                System.out.println("Processo " + GlobalVariables.running.getId() + " retornou para a fila de prontos.");
             }
 
             if (GlobalVariables.ready.isEmpty()) {
                 System.out.println("\nSem processos prontos para execução.");
-                GlobalVariables.running = new PCB(-1);
+                GlobalVariables.running = GlobalVariables.nop;
                 GlobalVariables.semaphoreCPU.release();
                 continue;
             }

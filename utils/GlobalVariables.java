@@ -1,7 +1,6 @@
 package utils;
 
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -30,7 +29,9 @@ public class GlobalVariables {
 	public static final Queue<PCB> blockedVM = new ConcurrentLinkedQueue<>();
 	public static final Queue<PCB> ready = new ConcurrentLinkedQueue<>();
 	
-	public static PCB running = null;
+	public static volatile PCB running = null;
 
 	public static boolean autoMode = true;
+
+	public static PCB nop = new PCB(-1);
 }

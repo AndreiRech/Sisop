@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import javax.swing.text.Utilities;
+
 import hardware.HW;
 import utils.GlobalVariables;
 import utils.Word;
@@ -85,8 +87,6 @@ public class ProcessManager {
 			processes.add(pcb);
 			GlobalVariables.ready.add(pcb);
 			pcb.setStates(ProcessStates.ready);
-			if (GlobalVariables.autoMode)
-				GlobalVariables.semaphoreScheduler.release();
 
 			return pcb;
 		}
@@ -119,7 +119,6 @@ public class ProcessManager {
 			for (PCB pcb : processes) {
 				if (pcb.getId() == id) {
 					target = pcb;
-					System.out.println("Achamos!");
 					break;
 				}
 			}
@@ -131,7 +130,7 @@ public class ProcessManager {
 
 			int pageSize = mm.getPageSize();
 
-			System.out.println("PAGE FAULT no processo " + id + ", página " + pageIndex);
+			System.out.println("PAGE FAULT / Processo " + id + " - Página " + pageIndex);
 
 			int frame = mm.requestFrame(target, pageIndex, processes);
 			target.getPagesTable()[pageIndex].setValid(true);
@@ -148,7 +147,7 @@ public class ProcessManager {
 			// Bloqueia o processo
 			target.setStates(ProcessStates.ready);
 
-			System.out.println("Página " + pageIndex + " carregada para o frame " + frame);
+			System.out.println("PAGE FAULT / Página " + pageIndex + " - Frame " + frame);
 
 			return frame;
 		}
