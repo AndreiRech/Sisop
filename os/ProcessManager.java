@@ -124,7 +124,6 @@ public class ProcessManager {
 		return pcb;
 	}
 
-	// TODO: ANALISAR ESSE MÉTODO
 	public void dealloc(int id) {
 		PCB target = null;
 
@@ -139,10 +138,6 @@ public class ProcessManager {
 			System.out.println("Gerente de Processos: Processo não encontrado.");
 			return;
 		}
-
-		// TODO: @Andrei não faz sentido liberar após o processo executar. Ele apenas
-		// tem que desalocar quando for ser vitimado. Vamos rever isso
-		mm.free(target.getPagesTable());
 
 		processes.remove(target);
 		GlobalVariables.ready.remove(target);

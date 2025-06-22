@@ -60,9 +60,9 @@ public class Sistema {
 					System.out.println("3 - progMinimo");
 					System.out.println("4 - fibonacci10");
 					System.out.println("5 - fibonacci10v2");
-					System.out.println("6 - PB");
-					System.out.println("7 - PC");
-					System.out.println("8 - fibonacciREAD");
+					System.out.println("6 - fibonacciREAD");
+					System.out.println("7 - PB");
+					System.out.println("8 - PC");
 					System.out.println("0 - Voltar");
 					System.out.print("> Informe o programa que deseja executar: ");
 					int program = in.nextInt();
@@ -188,15 +188,15 @@ public class Sistema {
 					break;
 
 				case 9:
-					GlobalVariables.autoMode = !GlobalVariables.autoMode;
-					System.out.println("Modo automático: " + (GlobalVariables.autoMode ? "Ativado" : "Desativado"));
-					break;
-
-				case 10:
 					System.out.println("Trace on...");
 					os.traceOn();
 					break;
 
+				case 10:
+					GlobalVariables.autoMode = !GlobalVariables.autoMode;
+					System.out.println("Modo automático: " + (GlobalVariables.autoMode ? "Ativado" : "Desativado"));
+					break;
+					
 				case 0:
 					System.out.println("Encerrando sistema operacional...");
 					GlobalVariables.shutdown = true;

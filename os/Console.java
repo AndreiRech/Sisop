@@ -30,7 +30,7 @@ public class Console {
                 System.out.println("Console: IO leitura");
 
                 System.out.println("                                                                                            IN:   ");
-                int input = 6; // in.nextInt();
+                int input = 9; // in.nextInt();
 
                 PCB p = GlobalVariables.blockedIO.peek();
 
