@@ -34,4 +34,13 @@ public class Utilities {
             dump(m[i]);
         }
     }
+
+    public void dumpD(int ini, int fim) {
+        Word[] m = hw.disk.pos; // m[] é o array de posições memória do hw
+        for (int i = ini; i < fim; i++) {
+            System.out.print(i);
+            System.out.print(":  ");
+            dump(m[i]);
+        }
+    }
 }

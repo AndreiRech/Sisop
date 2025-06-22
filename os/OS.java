@@ -119,6 +119,10 @@ public class OS {
 		utils.dump(start, end);
 	}
 
+	public void dumpD(int start, int end) {
+		utils.dumpD(start, end);
+	}
+
 	// Liga modo de execução em que CPU print cada instrução executada
 	public void traceOn() {
 		hw.cpu.debug = true;

@@ -38,6 +38,7 @@ public class Sistema {
 			System.out.println("4 - Executar processos");
 			System.out.println("5 - Dump de processo");
 			System.out.println("6 - Dump de memória");
+			System.out.println("10 - Dump de disco");
 			System.out.println("7 - Trace on");
 			System.out.println("8 - Trace off");
 			System.out.println(
@@ -193,6 +194,10 @@ public class Sistema {
 					System.out.println("Todas as threads encerradas.");
 					break;
 
+				case 10:
+					System.out.println("Dump de disco...");
+					os.dumpD(0, 150);
+					break;
 				default:
 					System.out.println("ERRO: Operação inválida. Tente novamente");
 					break;
