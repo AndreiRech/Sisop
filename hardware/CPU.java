@@ -105,12 +105,12 @@ public class CPU {
 
             System.out.println("\n Rodando processo: " + GlobalVariables.running.getId());
 
-            Thread.sleep(1000);
+            if (GlobalVariables.slowMode) Thread.sleep(1000);
             for (int j = 0; j < Q; j++) {
-                Thread.sleep(500);
+                if (GlobalVariables.slowMode) Thread.sleep(500);
 
                 if (GlobalVariables.running.getId() == -1) {
-                    System.out.println("Rodando NOP - aguardando processos...");
+                    // System.out.println("Rodando NOP - aguardando processos...");
 
                     if (!GlobalVariables.irpt.isEmpty()) {
                         for (Interrupts i : GlobalVariables.irpt) {

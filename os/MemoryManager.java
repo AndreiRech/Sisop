@@ -12,9 +12,9 @@ import utils.PageTableEntry;
 public class MemoryManager {
 		private HW hw;
 		private int pageSize;
-		private int framesNumber;
-		private boolean[] allocatedFrames;
-		private Queue<Integer> frameQueue = new LinkedList<>();
+		int framesNumber;
+		boolean[] allocatedFrames;
+		Queue<Integer> frameQueue = new LinkedList<>();
 
 		public MemoryManager(HW hw, int memorySize, int pageSize) {
 			this.hw = hw;
@@ -60,7 +60,7 @@ public class MemoryManager {
 			}
 		}
 
-		public int requestFrame(PCB requestingProcess, int pageIndex, List<PCB> processes) {
+		public int requestFrame(List<PCB> processes) {
 			for (int i = 0; i < framesNumber; i++) {
 				if (!allocatedFrames[i]) {
 					allocatedFrames[i] = true;

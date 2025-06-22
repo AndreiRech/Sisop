@@ -31,7 +31,8 @@ public class GlobalVariables {
 	
 	public static volatile PCB running = null;
 
-	public static boolean autoMode = true;
+	public static boolean autoMode = false;
+	public static boolean slowMode = false;
 
 	public static PCB nop = new PCB(-1);
 }

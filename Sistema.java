@@ -21,7 +21,11 @@ public class Sistema {
 	}
 
 	public static void main(String[] args) {
-		Sistema sistema = new Sistema(1024, 4096, 4);
+		int memorySize = 512;
+		int diskSize = 4096;
+		int pageSize = 4;
+
+		Sistema sistema = new Sistema(memorySize, diskSize, pageSize);
 		sistema.run();
 	}
 
@@ -38,11 +42,12 @@ public class Sistema {
 			System.out.println("4 - Executar processos");
 			System.out.println("5 - Dump de processo");
 			System.out.println("6 - Dump de memória");
-			System.out.println("10 - Dump de disco");
-			System.out.println("7 - Trace on");
-			System.out.println("8 - Trace off");
+			System.out.println("7 - Dump de disco");
+			System.out.println("8 - Trace on");
+			System.out.println("9 - Trace off");
 			System.out.println(
-					"9 - Alternar modo automático (atual: " + (GlobalVariables.autoMode ? "ativado" : "desativado") + ")");
+					"10 - Alternar modo automático (atual: " + (GlobalVariables.autoMode ? "ativado" : "desativado")
+							+ ")");
 			System.out.println("0 - Sair");
 			System.out.print("> Informe a operação que deseja realizar: ");
 			op = in.nextInt();
@@ -55,9 +60,9 @@ public class Sistema {
 					System.out.println("3 - progMinimo");
 					System.out.println("4 - fibonacci10");
 					System.out.println("5 - fibonacci10v2");
-					System.out.println("8 - fibonacciREAD");
 					System.out.println("6 - PB");
 					System.out.println("7 - PC");
+					System.out.println("8 - fibonacciREAD");
 					System.out.println("0 - Voltar");
 					System.out.print("> Informe o programa que deseja executar: ");
 					int program = in.nextInt();
@@ -84,15 +89,15 @@ public class Sistema {
 							break;
 
 						case 6:
+							os.newProcess(progs.retrieveProgram("fibonacciREAD"));
+							break;
+							
+						case 7:
 							os.newProcess(progs.retrieveProgram("PB"));
 							break;
-
-						case 7:
-							os.newProcess(progs.retrieveProgram("PC"));
-							break;
-
+							
 						case 8:
-							os.newProcess(progs.retrieveProgram("fibonacciREAD"));
+							os.newProcess(progs.retrieveProgram("PC"));
 							break;
 
 						case 0:
@@ -162,8 +167,19 @@ public class Sistema {
 					break;
 
 				case 7:
-					System.out.println("Trace on...");
-					os.traceOn();
+					System.out.println("Dump de disco...");
+					System.out.print("> Informe o início do dump de disco: ");
+					dumpStart = in.nextInt();
+					System.out.print("> Informe o fim do dump de disco: ");
+					dumpEnd = in.nextInt();
+
+					if (dumpStart < 0 || dumpEnd < 0 || dumpStart >= hw.disk.pos.length
+							|| dumpEnd >= hw.disk.pos.length
+							|| dumpStart > dumpEnd) {
+						System.out.println("ERRO: Intervalo inválido.");
+						break;
+					}
+					os.dumpD(dumpStart, dumpEnd);
 					break;
 
 				case 8:
@@ -174,6 +190,11 @@ public class Sistema {
 				case 9:
 					GlobalVariables.autoMode = !GlobalVariables.autoMode;
 					System.out.println("Modo automático: " + (GlobalVariables.autoMode ? "Ativado" : "Desativado"));
+					break;
+
+				case 10:
+					System.out.println("Trace on...");
+					os.traceOn();
 					break;
 
 				case 0:
@@ -194,10 +215,7 @@ public class Sistema {
 					System.out.println("Todas as threads encerradas.");
 					break;
 
-				case 10:
-					System.out.println("Dump de disco...");
-					os.dumpD(0, 150);
-					break;
+				
 				default:
 					System.out.println("ERRO: Operação inválida. Tente novamente");
 					break;
