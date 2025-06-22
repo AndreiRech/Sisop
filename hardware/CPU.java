@@ -4,7 +4,6 @@ import handlers.InterruptHandling;
 import handlers.SysCallHandling;
 import utils.GlobalVariables;
 import utils.Opcode;
-import utils.PCB;
 import utils.Utilities;
 import utils.Word;
 import enums.Interrupts;
@@ -23,7 +22,6 @@ public class CPU {
                       // nas proximas versoes isto pode modificar
 
     private Word[] m; // m é o array de memória "física", CPU tem uma ref a m para acessar
-    private Word[] d; // d é o array de disco "físico", CPU tem uma ref a d para acessar
 
     private InterruptHandling ih; // significa desvio para rotinas de tratamento de Int - se int ligada, desvia
     private SysCallHandling sysCall; // significa desvio para tratamento de chamadas de sistema
@@ -36,7 +34,6 @@ public class CPU {
         maxInt = 32767; // capacidade de representacao modelada
         minInt = -32767; // se exceder deve gerar interrupcao de overflow
         m = mem.pos; // usa o atributo 'm' para acessar a memoria, só para ficar mais pratico
-        d = disk.pos; // usa o atributo 'd' para acessar o disco, só para ficar mais pratico
         reg = new int[10]; // aloca o espaço dos registradores - regs 8 e 9 usados somente para IO
 
         this.debug = debug; // se true, print da instrucao em execucao

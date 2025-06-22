@@ -1,7 +1,6 @@
 package os;
 
 import utils.GlobalVariables;
-import utils.PCB;
 import hardware.HW;
 import enums.ProcessStates;
 

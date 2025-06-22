@@ -1,7 +1,5 @@
 package os;
 
-import java.util.Scanner;
-
 import utils.GlobalVariables;
 import utils.Opcode;
 import enums.Interrupts;
