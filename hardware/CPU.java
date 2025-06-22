@@ -108,7 +108,30 @@ public class CPU {
             Thread.sleep(1000);
             for (int j = 0; j < Q; j++) {
                 Thread.sleep(500);
-                if (GlobalVariables.running.getId() == -1 ) { continue; }
+
+                if (GlobalVariables.running.getId() == -1) {
+                    System.out.println("Rodando NOP - aguardando processos...");
+
+                    if (!GlobalVariables.irpt.isEmpty()) {
+                        for (Interrupts i : GlobalVariables.irpt) {
+                            ih.handle(i); // desvia para rotina de tratamento - esta rotina é do SO
+                            GlobalVariables.irpt.poll();
+                            break;
+                        }
+                    }
+
+                    if (!GlobalVariables.sysc.isEmpty()) {
+                        for (SysCalls s : GlobalVariables.sysc) {
+                            sysCall.handle(s); // desvia para rotina de tratamento - esta rotina é do SO
+                            GlobalVariables.sysc.poll();
+                            break;
+                        }
+                    }
+
+                    if (j == Q - 1) j = 0;
+
+                    continue;
+                }
                 // --------------------------------------------------------------------------------------------------
                 // FASE DE FETCH
                 int physPC = mmu(pc); // mmu faz a traducao de endereco logico para fisico, se necessario

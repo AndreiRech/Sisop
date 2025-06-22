@@ -16,9 +16,8 @@ public class Scheduler {
         while (!GlobalVariables.shutdown) {
             GlobalVariables.semaphoreScheduler.acquire();
 
-            if (GlobalVariables.running.getId() != -1 && GlobalVariables.running.getState() != ProcessStates.finished) {
+            if (GlobalVariables.running.getId() != -1 && GlobalVariables.running.getState() != ProcessStates.finished && GlobalVariables.running.getState() != ProcessStates.blocked) {
                 GlobalVariables.running.setContext(hw.cpu.pc, hw.cpu.reg);
-
                 GlobalVariables.running.setStates(ProcessStates.ready);
 
                 GlobalVariables.ready.add(GlobalVariables.running);

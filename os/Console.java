@@ -33,19 +33,20 @@ public class Console {
                 int input = 6; // in.nextInt();
 
                 PCB p = GlobalVariables.blockedIO.peek();
+
+                int address = p.getRegState()[9];
+                int page = address / 4;
+                int offset = address % 4;
+
+                if (!p.getPagesTable()[page].isValid()) {
+                    this.pm.allocPageFault(p.getId(), page);
+                }
+                int frame = p.getPagesTable()[page].getFrame();
+                int physicalAddress = frame * 4 + offset;
+
+                hw.memory.pos[physicalAddress] =  new Word(Opcode.DATA, -1, -1, input);
+
                 p.setRegState(9, input);
-
-                // int address = hw.cpu.reg[9];
-                // int page = address / 4;
-                // int offset = address % 4;
-
-                // if (!p.getPagesTable()[page].isValid()) {
-                //     this.pm.allocPageFault(p.getId(), page);
-                // }
-                // int frame = p.getPagesTable()[page].getFrame();
-                // int physicalAddress = frame * 4 + offset;
-
-                // hw.memory.pos[physicalAddress] =  new Word(Opcode.DATA, -1, -1, input);
             } else {
                 System.out.println("Console: IO escrita");
 
@@ -53,7 +54,7 @@ public class Console {
 
                 System.out.println("                                                                                            OUT:   " + p.getRegState()[9]);
             }
-
+            
             GlobalVariables.irpt.add(Interrupts.ioFinished);
         }
     }

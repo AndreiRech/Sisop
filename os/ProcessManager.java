@@ -144,9 +144,6 @@ public class ProcessManager {
 				hw.memory.pos[baseRam + i] = hw.disk.pos[baseDisk + i];
 			}
 
-			// Bloqueia o processo
-			target.setStates(ProcessStates.ready);
-
 			System.out.println("PAGE FAULT / Página " + pageIndex + " - Frame " + frame);
 
 			return frame;

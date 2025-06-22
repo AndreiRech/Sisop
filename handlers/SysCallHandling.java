@@ -24,6 +24,7 @@ public class SysCallHandling {
             case ioRequest:
                 System.out.println("IoRequest");
                 GlobalVariables.ready.remove(GlobalVariables.running);
+                GlobalVariables.running.setStates(ProcessStates.blocked);
                 GlobalVariables.blockedIO.add(GlobalVariables.running);
                 
                 switch (hw.cpu.reg[8]) {

@@ -69,7 +69,7 @@ public class MemoryManager {
 				}
 			}
 
-			System.out.println("MemoryManager: No free frames available, applying page replacement policy.");
+			System.out.println("Sem frames disponíveis. Iniciando substituição de página...");
 			int victimFrame = frameQueue.poll();
 			allocatedFrames[victimFrame] = true;
 

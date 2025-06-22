@@ -31,8 +31,6 @@ import utils.PCB;
 					System.out.println("Instrucao invalida - A execucao do processo " + GlobalVariables.running.getId()
 							+ " sera pausada e o processo cancelado.");
 
-					// Se o processo tem uma instrucao invalida ele e desalocado da memoria e
-					// retirado da fila de processos
 					pm.dealloc(GlobalVariables.running.getId());
 					
 					GlobalVariables.ready.remove(GlobalVariables.running);
@@ -47,6 +45,7 @@ import utils.PCB;
 					GlobalVariables.ready.add(p);
 					p.setStates(ProcessStates.ready);
 
+					if (GlobalVariables.running.getId() == -1 || GlobalVariables.ready.isEmpty()) GlobalVariables.semaphoreScheduler.release();
 					break;
 				case intEnderecoInvalido:
 					System.out.println("Endereco invalido - A execucao do processo " + GlobalVariables.running.getId() + " sera pausada e o processo cancelado.");
@@ -57,16 +56,21 @@ import utils.PCB;
 					GlobalVariables.semaphoreScheduler.release();
 					break;
 				case pageFault:
+					// Remove da fila de prontos e adiciona na fila de bloqueados
 					GlobalVariables.ready.remove(GlobalVariables.running);
 					GlobalVariables.blockedVM.add(GlobalVariables.running);
 
+					// Atualiza o estado do processo para bloqueado e salvo o contexto
 					GlobalVariables.running.setStates(ProcessStates.blocked);
 					GlobalVariables.running.setContext(hw.cpu.pc, hw.cpu.reg);
 
+					// Seta o ID da requisição de página
 					GlobalVariables.vmRequest.setId(GlobalVariables.running.getId());
 
+					// Seta o endereço lógico da página que causou a falha
 					GlobalVariables.semaphoreScheduler.release();
-					
+
+					// Libera o semáforo da VM para aguardar a requisição de página
 					GlobalVariables.semaphoreVm.release();
 					break;
 				case pageSaved, pageLoaded:
@@ -74,6 +78,7 @@ import utils.PCB;
 					GlobalVariables.ready.add(process);
 					process.setStates(ProcessStates.ready);
 
+					if (GlobalVariables.running.getId() == -1 || GlobalVariables.ready.isEmpty()) GlobalVariables.semaphoreScheduler.release();
 					break;
 				default:
 					System.out.println("Interrupção não tratada: " + irpt);
@@ -81,5 +86,3 @@ import utils.PCB;
 			}
 		}
 	}
-	// TODO -> console e chamado pela syscall e deve passar os registradores para
-	// salvar na memoria (deve ser o fisico nao o logico)
