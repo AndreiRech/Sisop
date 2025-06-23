@@ -14,8 +14,11 @@ public class Scheduler {
     public void roundRobin() throws InterruptedException {
         while (!GlobalVariables.shutdown) {
             GlobalVariables.semaphoreScheduler.acquire();
+            System.out.println(
+                    "\n----------------------------------- INICIO SCHEDULER -----------------------------------");
 
-            if (GlobalVariables.running.getId() != -1 && GlobalVariables.running.getState() != ProcessStates.finished && GlobalVariables.running.getState() != ProcessStates.blocked) {
+            if (GlobalVariables.running.getId() != -1 && GlobalVariables.running.getState() != ProcessStates.finished
+                    && GlobalVariables.running.getState() != ProcessStates.blocked) {
                 GlobalVariables.running.setContext(hw.cpu.pc, hw.cpu.reg);
                 GlobalVariables.running.setStates(ProcessStates.ready);
 
@@ -29,11 +32,13 @@ public class Scheduler {
                 GlobalVariables.semaphoreCPU.release();
                 continue;
             }
-            
+
             GlobalVariables.running = GlobalVariables.ready.poll();
             GlobalVariables.running.setStates(ProcessStates.running);
             hw.cpu.setContext(GlobalVariables.running.getPc(), GlobalVariables.running.getRegState());
 
+            System.out.println(
+                    "\n----------------------------------- FIM SCHEDULER -----------------------------------\n");
             GlobalVariables.semaphoreCPU.release();
         }
     }

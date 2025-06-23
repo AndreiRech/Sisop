@@ -5,55 +5,75 @@ import utils.Opcode;
 import enums.Interrupts;
 import hardware.HW;
 import utils.PCB;
-import utils.Word;
 
 public class Console {
     private HW hw;
     private ProcessManager pm;
+    private MemoryManager mm;
 
-     public Console(HW hw, ProcessManager pm) {
+    public Console(HW hw, ProcessManager pm, MemoryManager mm) {
         this.hw = hw;
         this.pm = pm;
+        this.mm = mm;
     }
 
     public void run() throws InterruptedException {
         while (!GlobalVariables.shutdown) {
-            // Scanner in = new Scanner(System.in);
-
             GlobalVariables.semaphoreConsole.acquire();
             System.out.println(
-                    "------------------------------------- [ CONSOLE ] -------------------------------------");
+                    "\n------------------------------------- [ INICIO CONSOLE ] -------------------------------------\n");
+
+            PCB p = GlobalVariables.blockedIO.peek();
+            if (p == null)
+                continue;
 
             if (GlobalVariables.ioRequest) {
-                System.out.println("Console: IO leitura");
+                // LÓGICA DE LEITURA
+                System.out.println("    ====> CONSOLE: IO leitura");
 
-                System.out.println("                                                                                            IN:   ");
-                int input = 9; // in.nextInt();
+                int input = 9; // Valor de exemplo, como no log
+                System.out.println("    ====> CONSOLE INPUT: " + input);
 
-                PCB p = GlobalVariables.blockedIO.peek();
+                int logicalAddress = p.getRegState()[9];
+                int pageSize = mm.getPageSize(); // Pega o pageSize através do PM -> MM
 
-                int address = p.getRegState()[9];
-                int page = address / 4;
-                int offset = address % 4;
+                // [CORREÇÃO FINAL] Escreve o valor lido DIRETAMENTE na imagem do processo no
+                // DISCO
+                try {
+                    int[] diskMap = pm.getDiskMapForProcess(p.getId());
+                    if (diskMap != null) {
+                        int page = logicalAddress / pageSize;
+                        int offset = logicalAddress % pageSize;
+                        int diskPage = diskMap[page];
+                        int physDiskAddr = diskPage * pageSize + offset;
 
-                if (!p.getPagesTable()[page].isValid()) {
-                    this.pm.allocPageFault(p.getId(), page);
+                        // Escreve o dado lido na posição correta do disco
+                        hw.disk.pos[physDiskAddr].opc = Opcode.DATA;
+                        hw.disk.pos[physDiskAddr].p = input;
+
+                        System.out.println("    ====> CONSOLE: Valor " + input + " escrito no endereço lógico "
+                                + logicalAddress + " (Disco Pág:" + diskPage + ", Offset:" + offset + ")");
+                    } else {
+                        System.out
+                                .println("    ERRO CONSOLE: Não foi possível encontrar o mapa de disco para o processo "
+                                        + p.getId());
+                    }
+                } catch (Exception e) {
+                    System.out.println(
+                            "    ERRO CONSOLE: Falha ao tentar escrever no disco. Endereço lógico: " + logicalAddress);
+                    e.printStackTrace();
                 }
-                int frame = p.getPagesTable()[page].getFrame();
-                int physicalAddress = frame * 4 + offset;
 
-                hw.memory.pos[physicalAddress] =  new Word(Opcode.DATA, -1, -1, input);
-
-                p.setRegState(9, input);
             } else {
-                System.out.println("Console: IO escrita");
-
-                PCB p = GlobalVariables.blockedIO.peek();
-
-                System.out.println("                                                                                            OUT:   " + p.getRegState()[9]);
+                // LÓGICA DE ESCRITA
+                System.out.println("    CONSOLE: IO escrita");
+                System.out.println("    CONSOLE OUTPUT:   " + p.getRegState()[9]);
             }
-            
+
             GlobalVariables.irpt.add(Interrupts.ioFinished);
+
+            System.out.println(
+                    "\n------------------------------------- [ FIM CONSOLE ] -------------------------------------\n\n");
         }
     }
 }

@@ -77,12 +77,12 @@ public class CPU {
 
     public int mmu(int pc) {
         int page = pc / 4;
-        System.out.println("\nMMU: pc=" + pc + " page=" + page);
+        System.out.println("\n      MMU: pc=" + pc + " page=" + page);
 
         if (GlobalVariables.running.getId() == -1) { return -1; }
 
         if (!GlobalVariables.running.getPagesTable()[page].isValid()) {
-            System.out.println("Pagina " + page + " não válida. PAGE FAULT!!!!");
+            System.out.println("\n\nPAGE FAULT: Pagina " + page + " não válida.");
             GlobalVariables.irpt.add(Interrupts.pageFault);
             GlobalVariables.vmRequest.setPage(page);
             return -1;
@@ -99,16 +99,17 @@ public class CPU {
             // Espera o scheduler liberar a CPU para o processo
             GlobalVariables.semaphoreCPU.acquire();
             boolean processEnd = false;
-
+            
             System.out.println("\n Rodando processo: " + GlobalVariables.running.getId());
-
-            if (GlobalVariables.slowMode) Thread.sleep(1000);
+            
+            if (GlobalVariables.slowMode) Thread.sleep(800);
+            System.out.println("\n----------------------------------- INICIO CPU -----------------------------------\n");
             for (int j = 0; j < Q; j++) {
-                if (GlobalVariables.slowMode) Thread.sleep(500);
-
+                if (GlobalVariables.slowMode) Thread.sleep(400);
+                
                 if (GlobalVariables.running.getId() == -1) {
                     // System.out.println("Rodando NOP - aguardando processos...");
-
+                    
                     if (!GlobalVariables.irpt.isEmpty()) {
                         for (Interrupts i : GlobalVariables.irpt) {
                             ih.handle(i); // desvia para rotina de tratamento - esta rotina é do SO
@@ -116,7 +117,7 @@ public class CPU {
                             break;
                         }
                     }
-
+                    
                     if (!GlobalVariables.sysc.isEmpty()) {
                         for (SysCalls s : GlobalVariables.sysc) {
                             sysCall.handle(s); // desvia para rotina de tratamento - esta rotina é do SO
@@ -124,9 +125,9 @@ public class CPU {
                             break;
                         }
                     }
-
+                    
                     if (j == Q - 1) j = 0;
-
+                    
                     continue;
                 }
                 // --------------------------------------------------------------------------------------------------
@@ -139,7 +140,7 @@ public class CPU {
                                         // guarda em ir
                         // resto é dump de debug
                         if (debug) {
-                            System.out.print("                                              regs: ");
+                            System.out.print("          Estado dos Registradores: ");
                             for (int i = 0; i < 10; i++) {
                                 System.out.print(" r[" + i + "]:" + reg[i]);
                             }
@@ -147,95 +148,95 @@ public class CPU {
                             System.out.println();
                         }
                         if (debug) {
-                            System.out.print("                      pc: " + pc + "       exec: ");
+                            System.out.print("              PC: " + pc + ", EXEC: ");
                             u.dump(ir);
                         }
 
                         // --------------------------------------------------------------------------------------------------
                         // FASE DE EXECUCAO DA INSTRUCAO CARREGADA NO ir
                         switch (ir.opc) { // conforme o opcode (código de operação) executa
-
+                            
                             // Instrucoes de Busca e Armazenamento em Memoria
                             case LDI: // Rd ← k veja a tabela de instrucoes do HW simulado para entender a semantica
-                                      // da instrucao
-                                reg[ir.ra] = ir.p;
-                                pc++;
-                                break;
+                            // da instrucao
+                            reg[ir.ra] = ir.p;
+                            pc++;
+                            break;
                             case LDD: // Rd <- [A]
-                                int phys1 = mmu(ir.p);
-                                if (legal(phys1)) {
-                                    reg[ir.ra] = m[phys1].p;
-                                    pc++;
-                                }
-                                break;
-                            case LDX: // RD <- [RS] // NOVA
-                                int phys2 = mmu(reg[ir.rb]);
-                                if (legal(phys2)) {
-                                    reg[ir.ra] = m[phys2].p;
-                                    pc++;
-                                }
-                                break;
-                            case STD: // [A] ← Rs
-                                int phys3 = mmu(ir.p);
-                                if (legal(phys3)) {
-                                    m[phys3].opc = Opcode.DATA;
-                                    m[phys3].p = reg[ir.ra];
-                                    pc++;
-                                    if (debug) {
-                                        System.out.print("                                  ");
-                                        u.dump(phys3, phys3 + 1);
-                                    }
-                                }
-                                break;
-                            case STX: // [Rd] ←Rs
-                                int phys4 = mmu(reg[ir.ra]);
-                                if (legal(phys4)) {
-                                    m[phys4].opc = Opcode.DATA;
-                                    m[phys4].p = reg[ir.rb];
-                                    pc++;
-                                }
-                                ;
-                                break;
-                            case MOVE: // RD <- RS
-                                reg[ir.ra] = reg[ir.rb];
+                            int phys1 = mmu(ir.p);
+                            if (legal(phys1)) {
+                                reg[ir.ra] = m[phys1].p;
                                 pc++;
-                                break;
+                            }
+                            break;
+                            case LDX: // RD <- [RS] // NOVA
+                            int phys2 = mmu(reg[ir.rb]);
+                            if (legal(phys2)) {
+                                reg[ir.ra] = m[phys2].p;
+                                pc++;
+                            }
+                            break;
+                            case STD: // [A] ← Rs
+                            int phys3 = mmu(ir.p);
+                            if (legal(phys3)) {
+                                m[phys3].opc = Opcode.DATA;
+                                m[phys3].p = reg[ir.ra];
+                                pc++;
+                                if (debug) {
+                                    System.out.print("                                  ");
+                                    u.dump(phys3, phys3 + 1);
+                                }
+                            }
+                            break;
+                            case STX: // [Rd] ←Rs
+                            int phys4 = mmu(reg[ir.ra]);
+                            if (legal(phys4)) {
+                                m[phys4].opc = Opcode.DATA;
+                                m[phys4].p = reg[ir.rb];
+                                pc++;
+                            }
+                            ;
+                            break;
+                            case MOVE: // RD <- RS
+                            reg[ir.ra] = reg[ir.rb];
+                            pc++;
+                            break;
                             // Instrucoes Aritmeticas
                             case ADD: // Rd ← Rd + Rs
-                                reg[ir.ra] = reg[ir.ra] + reg[ir.rb];
-                                testOverflow(reg[ir.ra]);
-                                pc++;
-                                break;
+                            reg[ir.ra] = reg[ir.ra] + reg[ir.rb];
+                            testOverflow(reg[ir.ra]);
+                            pc++;
+                            break;
                             case ADDI: // Rd ← Rd + k
-                                reg[ir.ra] = reg[ir.ra] + ir.p;
-                                testOverflow(reg[ir.ra]);
-                                pc++;
-                                break;
+                            reg[ir.ra] = reg[ir.ra] + ir.p;
+                            testOverflow(reg[ir.ra]);
+                            pc++;
+                            break;
                             case SUB: // Rd ← Rd - Rs
-                                reg[ir.ra] = reg[ir.ra] - reg[ir.rb];
-                                testOverflow(reg[ir.ra]);
-                                pc++;
-                                break;
+                            reg[ir.ra] = reg[ir.ra] - reg[ir.rb];
+                            testOverflow(reg[ir.ra]);
+                            pc++;
+                            break;
                             case SUBI: // RD <- RD - k // NOVA
-                                reg[ir.ra] = reg[ir.ra] - ir.p;
-                                testOverflow(reg[ir.ra]);
-                                pc++;
-                                break;
+                            reg[ir.ra] = reg[ir.ra] - ir.p;
+                            testOverflow(reg[ir.ra]);
+                            pc++;
+                            break;
                             case MULT: // Rd <- Rd * Rs
-                                reg[ir.ra] = reg[ir.ra] * reg[ir.rb];
-                                testOverflow(reg[ir.ra]);
-                                pc++;
-                                break;
+                            reg[ir.ra] = reg[ir.ra] * reg[ir.rb];
+                            testOverflow(reg[ir.ra]);
+                            pc++;
+                            break;
 
                             // Instrucoes JUMP
                             case JMP: // PC <- k
-                                pc = ir.p;
+                            pc = ir.p;
                                 break;
-                            case JMPIM: // PC <- [A]
+                                case JMPIM: // PC <- [A]
                                 int phys5 = mmu(ir.p);
                                 pc = m[phys5].p;
                                 break;
-                            case JMPIG: // If Rc > 0 Then PC ← Rs Else PC ← PC +1
+                                case JMPIG: // If Rc > 0 Then PC ← Rs Else PC ← PC +1
                                 if (reg[ir.rb] > 0) {
                                     pc = reg[ir.ra];
                                 } else {
@@ -243,41 +244,41 @@ public class CPU {
                                 }
                                 break;
                             case JMPIGK: // If RC > 0 then PC <- k else PC++
-                                if (reg[ir.rb] > 0) {
-                                    pc = ir.p;
-                                } else {
-                                    pc++;
+                            if (reg[ir.rb] > 0) {
+                                pc = ir.p;
+                            } else {
+                                pc++;
                                 }
                                 break;
                             case JMPILK: // If RC < 0 then PC <- k else PC++
-                                if (reg[ir.rb] < 0) {
+                            if (reg[ir.rb] < 0) {
                                     pc = ir.p;
                                 } else {
                                     pc++;
                                 }
                                 break;
-                            case JMPIEK: // If RC = 0 then PC <- k else PC++
+                                case JMPIEK: // If RC = 0 then PC <- k else PC++
                                 if (reg[ir.rb] == 0) {
                                     pc = ir.p;
                                 } else {
                                     pc++;
                                 }
                                 break;
-                            case JMPIL: // if Rc < 0 then PC <- Rs Else PC <- PC +1
+                                case JMPIL: // if Rc < 0 then PC <- Rs Else PC <- PC +1
                                 if (reg[ir.rb] < 0) {
                                     pc = reg[ir.ra];
                                 } else {
                                     pc++;
                                 }
                                 break;
-                            case JMPIE: // If Rc = 0 Then PC <- Rs Else PC <- PC +1
+                                case JMPIE: // If Rc = 0 Then PC <- Rs Else PC <- PC +1
                                 if (reg[ir.rb] == 0) {
                                     pc = reg[ir.ra];
                                 } else {
                                     pc++;
                                 }
                                 break;
-                            case JMPIGM: // If RC > 0 then PC <- [A] else PC++
+                                case JMPIGM: // If RC > 0 then PC <- [A] else PC++
                                 int phys6 = mmu(ir.p);
                                 if (legal(phys6)) {
                                     if (reg[ir.rb] > 0) {
@@ -287,7 +288,7 @@ public class CPU {
                                     }
                                 }
                                 break;
-                            case JMPILM: // If RC < 0 then PC <- k else PC++
+                                case JMPILM: // If RC < 0 then PC <- k else PC++
                                 int phys7 = mmu(ir.p);
                                 if (reg[ir.rb] < 0) {
                                     pc = m[phys7].p;
@@ -295,7 +296,7 @@ public class CPU {
                                     pc++;
                                 }
                                 break;
-                            case JMPIEM: // If RC = 0 then PC <- k else PC++
+                                case JMPIEM: // If RC = 0 then PC <- k else PC++
                                 int phys8 = mmu(ir.p);
                                 if (reg[ir.rb] == 0) {
                                     pc = m[phys8].p;
@@ -303,43 +304,43 @@ public class CPU {
                                     pc++;
                                 }
                                 break;
-                            case JMPIGT: // If RS>RC then PC <- k else PC++
+                                case JMPIGT: // If RS>RC then PC <- k else PC++
                                 if (reg[ir.ra] > reg[ir.rb]) {
                                     pc = ir.p;
                                 } else {
                                     pc++;
                                 }
                                 break;
-
-                            case DATA: // pc está sobre área supostamente de dados
+                                
+                                case DATA: // pc está sobre área supostamente de dados
                                 GlobalVariables.irpt.add(Interrupts.intInstrucaoInvalida);
                                 break;
-
-                            // Chamadas de sistema
-                            case SYSCALL:
+                                
+                                // Chamadas de sistema
+                                case SYSCALL:
                                 GlobalVariables.sysc.add(SysCalls.ioRequest); // <<<<< aqui desvia para rotina de
-                                                                              // chamada de
+                                // chamada de
                                 // sistema, no momento so
                                 pc++;
                                 break;
-
-                            case STOP: // por enquanto, para execucao
+                                
+                                case STOP: // por enquanto, para execucao
                                 processEnd = true;
                                 break;
-
-                            // Inexistente
-                            default:
+                                
+                                // Inexistente
+                                default:
                                 GlobalVariables.irpt.add(Interrupts.intInstrucaoInvalida);
                                 break;
+                            }
                         }
                     }
-                }
-
-                if (processEnd)
+                    
+                    if (processEnd)
                     GlobalVariables.sysc.add(SysCalls.processEnd);
-                else if (j == Q - 1)
+                    else if (j == Q - 1)
                     GlobalVariables.irpt.add(Interrupts.roundRobin);
-
+                    
                 // --------------------------------------------------------------------------------------------------
                 // VERIFICA INTERRUPÇÃO !!! - TERCEIRA FASE DO CICLO DE INSTRUÇÕES
                 if (!GlobalVariables.irpt.isEmpty()) {
@@ -348,11 +349,11 @@ public class CPU {
                         GlobalVariables.irpt.poll();
 
                         if (i == Interrupts.pageFault) j = Q;
-
+                        
                         break;
                     }
                 }
-
+                
                 if (!GlobalVariables.sysc.isEmpty()) {
                     for (SysCalls s : GlobalVariables.sysc) {
                         sysCall.handle(s); // desvia para rotina de tratamento - esta rotina é do SO
@@ -361,7 +362,10 @@ public class CPU {
                         break;
                     }
                 }
+
             }
+            
+            System.out.println("\n----------------------------------- FIM CPU -----------------------------------\n");
 
         } // FIM DO CICLO DE UMA INSTRUÇÃO
     }

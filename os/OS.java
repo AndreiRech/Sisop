@@ -30,7 +30,7 @@ public class OS {
 		mm = new MemoryManager(hw, tamMem, tamPag);
 		pm = new ProcessManager(hw, mm);
 		scheduler = new Scheduler(hw);
-		console = new Console(hw, pm);
+		console = new Console(hw, pm, mm);
 		vmIo = new VmIo(pm);
 		ih = new InterruptHandling(hw, pm);
 		sc = new SysCallHandling(hw, pm);

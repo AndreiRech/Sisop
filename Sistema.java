@@ -21,7 +21,7 @@ public class Sistema {
 	}
 
 	public static void main(String[] args) {
-		int memorySize = 512;
+		int memorySize = 16;
 		int diskSize = 4096;
 		int pageSize = 4;
 
